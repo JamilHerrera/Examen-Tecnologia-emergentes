@@ -1,0 +1,169 @@
+version: '3.8'
+
+services:
+  # SQL Server - Base de datos
+  mssql:
+    image: mcr.microsoft.com/mssql/server:2022-latest
+    container_name: wwidw_mssql
+    environment:
+      ACCEPT_EULA: Y
+      SA_PASSWORD: ${SA_PASSWORD:-YourSecurePassword123!}
+      MSSQL_PID: Developer
+    ports:
+      - "1433:1433"
+    volumes:
+      - mssql_data:/var/opt/mssql
+      - ./database/init:/init
+      - ./database/staging:/staging_scripts
+      - ./database/warehouse:/warehouse_scripts
+    healthcheck:
+      test: ["CMD", "/opt/mssql-tools/bin/sqlcmd", "-S", "localhost", "-U", "sa", "-P", "${SA_PASSWORD:-YourSecurePassword123!}", "-Q", "SELECT 1"]
+      interval: 10s
+      timeout: 5s
+      retries: 3
+    networks:
+      - data_platform
+
+  # PostgreSQL - Opcional (para source Pagila si necesario)
+  postgres:
+    image: postgres:15-alpine
+    container_name: wwidw_postgres
+    environment:
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-postgres}
+      POSTGRES_DB: pagila
+    ports:
+      - "5432:5432"
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    networks:
+      - data_platform
+    profiles:
+      - optional
+
+  # Ollama - Generative AI Local
+  ollama:
+    image: ollama/ollama:latest
+    container_name: wwidw_ollama
+    ports:
+      - "11434:11434"
+    volumes:
+      - ollama_data:/root/.ollama
+    environment:
+      OLLAMA_HOST: 0.0.0.0:11434
+    networks:
+      - data_platform
+    # Descarga modelo al iniciar (neural-chat)
+    command: serve
+
+  # Backend API - FastAPI
+  backend:
+    build:
+      context: ./backend
+      dockerfile: Dockerfile
+    container_name: wwidw_backend
+    ports:
+      - "8000:8000"
+    environment:
+      DATABASE_URL: mssql+pyodbc://sa:${SA_PASSWORD:-YourSecurePassword123!}@mssql:1433/${DW_DB:-WideWorldImporters_DW}?driver=ODBC+Driver+17+for+SQL+Server
+      OLLAMA_URL: http://ollama:11434
+      LOG_LEVEL: ${LOG_LEVEL:-INFO}
+    volumes:
+      - ./backend:/app
+      - ./machine-learning/models:/app/models
+    depends_on:
+      mssql:
+        condition: service_healthy
+      ollama:
+        condition: service_started
+    networks:
+      - data_platform
+    profiles:
+      - full_stack
+
+  # Frontend - React
+  frontend:
+    build:
+      context: ./frontend
+      dockerfile: Dockerfile
+    container_name: wwidw_frontend
+    ports:
+      - "3000:3000"
+    environment:
+      REACT_APP_API_URL: http://localhost:8000
+    volumes:
+      - ./frontend/src:/app/src
+    depends_on:
+      - backend
+    networks:
+      - data_platform
+    profiles:
+      - full_stack
+
+  # ETL Runner - Python
+  etl:
+    build:
+      context: ./etl
+      dockerfile: Dockerfile
+    container_name: wwidw_etl
+    environment:
+      SOURCE_DB: ${SOURCE_DB:-WideWorldImporters}
+      STAGING_DB: ${STAGING_DB:-WideWorldImporters_Staging}
+      DW_DB: ${DW_DB:-WideWorldImporters_DW}
+      DATABASE_URL: mssql+pyodbc://sa:${SA_PASSWORD:-YourSecurePassword123!}@mssql:1433/${DW_DB:-WideWorldImporters_DW}?driver=ODBC+Driver+17+for+SQL+Server
+      LOG_LEVEL: ${LOG_LEVEL:-INFO}
+    volumes:
+      - ./etl:/app
+      - ./logs:/app/logs
+    depends_on:
+      mssql:
+        condition: service_healthy
+    networks:
+      - data_platform
+    profiles:
+      - etl_only
+    command: python -c "print('ETL container ready')"
+
+  # ML Training - Python
+  ml:
+    build:
+      context: ./machine-learning
+      dockerfile: Dockerfile
+    container_name: wwidw_ml
+    environment:
+      DATABASE_URL: mssql+pyodbc://sa:${SA_PASSWORD:-YourSecurePassword123!}@mssql:1433/${DW_DB:-WideWorldImporters_DW}?driver=ODBC+Driver+17+for+SQL+Server
+      MODEL_PATH: /app/models/sales_forecast_model.pkl
+    volumes:
+      - ./machine-learning:/app
+      - ./machine-learning/models:/app/models
+    depends_on:
+      mssql:
+        condition: service_healthy
+    networks:
+      - data_platform
+    profiles:
+      - ml_only
+    command: python -c "print('ML container ready')"
+
+  # Redis - Opcional (para caching y notificaciones)
+  redis:
+    image: redis:7-alpine
+    container_name: wwidw_redis
+    ports:
+      - "6379:6379"
+    volumes:
+      - redis_data:/data
+    networks:
+      - data_platform
+    profiles:
+      - optional
+
+volumes:
+  mssql_data:
+  postgres_data:
+  ollama_data:
+  redis_data:
+
+networks:
+  data_platform:
+    driver: bridge
