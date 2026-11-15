@@ -30,7 +30,9 @@ Otras reglas: periodos relativos ("ultimo trimestre") se calculan sobre la **ult
 `ops.assistant_audit`: usuario, pregunta (max. 1000 car.), intencion, resultado, modelo y latencia. **No** se guarda la respuesta ni los datos consultados.
 
 ## Pruebas del asistente
-- 15 preguntas (`test_cases.json`): 7 del enunciado + periodos explicitos + top + **2 sin datos** (2020 y junio-2016) + 1 ambigua + 1 fuera de alcance + 2 de seguridad. Cada caso valida intencion/resultado esperado, que los hechos esten presentes y, cuando aplica, **compara la cifra con una consulta independiente al origen** (`Sales.Orders`/`OrderLines`).
-- Ejecutar: `node generative-ai/run_eval.mjs` → genera [RESULTADOS_PRUEBAS.md](RESULTADOS_PRUEBAS.md) (pregunta, esperado, respaldo, respuesta, interpretacion, cifras no verificadas).
+- 15 preguntas (`test_cases.json`): 7 del enunciado + periodos explicitos + top + **2 sin datos** (2020 y junio-2016) + 1 ambigua + 1 fuera de alcance + 2 de seguridad. Todas validan el contrato de intencion/resultado y hechos; 9 incluyen criterios semanticos explicitos para la interpretacion. Cuando aplica, **compara cifras con consultas independientes al origen** (`Sales.Orders`/`OrderLines`).
+- La evaluacion semantica combina requisitos por caso con verificaciones deterministas de cifras, direccion de variaciones y nombres de entidades. Se reportan por separado el contrato funcional y los criterios semanticos; un borrador descartado tambien se evalua para medir la calidad de generacion.
+- No se usa un LLM como juez de aprobado/reprobado: en pruebas, el mismo modelo local produjo falsos positivos y afirmaciones contrarias a los hechos al juzgar sus respuestas. Los criterios automatizados son especificos del conjunto de pruebas y **no certifican la correccion semantica general**; se requiere revision humana.
+- Ejecutar: `node generative-ai/run_eval.mjs` → genera [RESULTADOS_PRUEBAS.md](RESULTADOS_PRUEBAS.md) (pregunta, criterios, hechos, interpretacion, hallazgos y verificacion independiente).
 - Pruebas unitarias sin LLM (periodos, enrutador, bloqueo, verificador): `backend/test/assistant.test.js`.
-- Revision manual de la interpretacion y limitaciones del modelo pequeno: [REVISION_MANUAL.md](REVISION_MANUAL.md).
+- Revisar manualmente en el reporte los borradores semanticos fallidos antes de cambiar el prompt o el modelo; el reporte distingue borradores descartados de texto mostrado al usuario.

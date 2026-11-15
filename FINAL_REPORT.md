@@ -26,7 +26,7 @@ La plataforma integra WideWorldImporters con un ETL en Python, un Data Warehouse
 | Migracion de auditoria | Se verifico en SQL Server `ops.assistant_audit.Outcome` como `nvarchar(40)`; se aplico el `ALTER` solo si el ancho anterior lo requeria. |
 | Entrenamiento ML | Exitoso; selecciono `rf_leaf5`. MAE de validacion: $87,715 vs $110,552 de la base; MAE de prueba: $127,721 vs $130,476; MAPE de prueba: 12.0% vs 12.1%. Modelo registrado: `sales-weekly-202611151623`. |
 | Evaluacion de deriva ML | `predict.py --evaluate` no encontro predicciones cuyo periodo objetivo ya tenga ventas reales completas. Por tanto, no hay una metrica de deriva observada; la prueba temporal de entrenamiento anterior si se evaluo. |
-| Evaluacion Ollama | 15/15 casos pasaron los checks automatizados de intencion, resultado y hechos, con corroboracion independiente para los casos configurados. **No mide exactitud semantica.** En los casos 3 y 8 el verificador descarto borradores por traduccion de nombres y direccion contradictoria, respectivamente. |
+| Evaluacion Ollama | Contrato funcional: 15/15; criterios semanticos por caso: 7/9; resultado integral: 13/15. Los borradores de los casos 3 y 8 fallaron por omitir/cambiar metricas, traducir nombres y citar 16.3% en lugar de 17.3%; el asistente descarto ambos y mostro los hechos del DW. |
 | Sintaxis Python | `etl/load.py`, `etl/audit.py` y sus pruebas compilaron con Python 3.15.2; `etl/main.py`, `etl/ops_log.py` y `database/generate_data_dictionary.py` compilaron en una comprobacion previa. |
 | ETL completo de staging | Completado sin fallos: 605,176/605,176 filas en cada capa (raw y clean), 10 tablas por capa y auditoria completada. La carga tomo 2,767.07 s; la reconciliacion posterior paso 10/10 comprobaciones (RunID 10005). |
 
@@ -34,21 +34,20 @@ La plataforma integra WideWorldImporters con un ETL en Python, un Data Warehouse
 
 Consultar [Data Warehouse](documentation/04_DATA_WAREHOUSE.md) y [modelo ML](machine-learning/README.md) para el diseno y resultados documentados de validaciones anteriores. Los valores de ML de arriba son de la ejecucion actual.
 
-El asistente muestra los hechos consultados por separado de la interpretacion de Ollama. Las comprobaciones de cifras, signos y traducciones reducen algunos errores, pero son heuristicas y no prueban la correccion semantica. El 15/15 refleja los checks del script, no que las 15 interpretaciones sean correctas. Las predicciones tambien deben interpretarse como estimaciones, no como datos historicos.
+El asistente muestra los hechos consultados por separado de la interpretacion de Ollama. El 15/15 corresponde al contrato funcional; los criterios semanticos explicitos cubren 9 casos, no prueban la correccion general del lenguaje y requieren revision humana. Las predicciones tambien deben interpretarse como estimaciones, no como datos historicos.
 
 ## Limitaciones conocidas
 
 - El alcance analitico implementado es ventas; compras, inventario historico y rentabilidad basada en costos no estan cubiertos.
 - Los datos de muestra terminan el 31 de mayo de 2016; el modelo semanal tiene una ventaja pequena sobre la linea base en el conjunto de prueba documentado.
 - La consistencia de staging no tiene aun una regla implementada: ahora se reporta como no medida y no se incluye en el score general. Una falla de insercion deja la carga marcada como fallida y con conteos de filas; filas insertadas previamente pueden permanecer en staging hasta repetir la carga.
-- La evaluacion automatizada de GenAI no califica adecuadamente el significado de las respuestas.
+- La evaluacion semantica usa aserciones especificas para nueve casos y verificaciones deterministas; no certifica el significado en preguntas abiertas. El juez LLM local se descarto porque producia falsos positivos contra respuestas consistentes con los hechos.
 - La evaluacion de deriva en produccion requiere que existan semanas objetivo con ventas reales completas; los datos actuales terminan el 31 de mayo de 2016.
 - La compilacion del frontend advierte sobre el tamano del bundle. No impidio el build.
 - El historial Git conserva una credencial de desarrollo antigua; debe rotarse y evaluarse su exposicion antes de hacer publico el repositorio. Quitarla del HEAD no la elimina del historial.
 
 ## Trabajo pendiente para el cierre del proyecto
 
-- Fortalecer la evaluacion semantica del asistente; los checks actuales no certifican la veracidad general de sus interpretaciones.
 - Rotar y evaluar la credencial antigua presente en el historial Git antes de hacer publico el repositorio.
 - Ampliar el alcance analitico mas alla de ventas si lo requiere la rubrica.
 
