@@ -147,3 +147,13 @@ test('el backend no puede leer tablas del DW directamente (minimo privilegio)', 
   const { query } = await import('../src/db.js');
   await assert.rejects(() => query('SELECT TOP 1 * FROM dw.FactSales'));
 });
+
+test('forecast ML expone modelo versionado, metricas vs linea base y predicciones etiquetadas', async () => {
+  const body = await (await get('/ml/forecast')).json();
+  assert.equal(body.kind, 'prediction');
+  assert.match(body.model.version, /^sales-weekly-/);
+  assert.ok(body.model.metrics.test.baseline.mae > 0);
+  assert.equal(body.predictions.length, 4);
+  assert.ok(body.predictions.every((p) => p.lower < p.value && p.value < p.upper));
+  assert.ok(body.history.length === 26);
+});

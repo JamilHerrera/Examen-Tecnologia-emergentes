@@ -8,6 +8,7 @@ import {
 } from '../services/analytics.js';
 import { snapshotMetrics } from '../metrics.js';
 import { requireRole } from '../auth.js';
+import { mlRouter } from './ml.js';
 
 export const router = Router();
 
@@ -103,3 +104,5 @@ router.get('/ops/etl-status', wrap(async (_req, res) => {
 }));
 
 router.get('/ops/metrics', requireRole('admin'), (_req, res) => res.json(snapshotMetrics()));
+
+router.use('/ml', mlRouter);
