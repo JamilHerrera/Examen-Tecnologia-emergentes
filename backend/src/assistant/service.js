@@ -4,7 +4,7 @@ import { chat, ollamaStatus } from './ollama.js';
 import { parsePeriod } from './periods.js';
 import { routeByLlm, routeByRules } from './router.js';
 import { TOOLS, dataAsOf } from './tools.js';
-import { findUnverifiedNumbers } from './verify.js';
+import { findDirectionContradictions, findTranslatedNames, findUnverifiedNumbers } from './verify.js';
 
 export const MAX_QUESTION = 300;
 export const NO_DATA = 'No hay datos suficientes para responder.';
@@ -109,9 +109,13 @@ export async function ask({ username, question: rawQuestion }) {
 
   // La interpretacion generada solo se muestra si no contradice ni inventa respecto a los hechos.
   const unverifiedNumbers = findUnverifiedNumbers(generated, result.facts);
+  const contradictions = findDirectionContradictions(generated, result.facts);
+  const translated = findTranslatedNames(generated, result.facts);
   let status = 'accepted';
   if (REFUSAL.test(generated) || ECHO.test(generated) || generated.length < 20) status = 'discarded_unusable';
   else if (unverifiedNumbers.length) status = 'discarded_unverified_numbers';
+  else if (contradictions.length) status = 'discarded_direction_contradiction';
+  else if (translated.length) status = 'discarded_translated_names';
 
   return finish({
     ...common, llmUsed: true, model: config.ollama.model, unverifiedNumbers,

@@ -28,7 +28,7 @@ C:\...\database\backups\WideWorldImporters-Full.bak
 #### Opción B: Crear desde cero
 ```sql
 -- En SQL Server Management Studio (localhost,1433)
--- Usuario: sa | Password: YourPassword123!
+-- Usuario: sa | Password: el valor de MSSQL_SA_PASSWORD en tu .env
 
 -- Restaurar desde backup
 RESTORE DATABASE [WideWorldImporters] 
@@ -122,7 +122,7 @@ SQL_SERVER_CONFIG = {
     "server": "localhost,1433",
     "database": "master",
     "user": "sa",
-    "password": "YourPassword123!",
+    "password": os.environ["MSSQL_SA_PASSWORD"],  # desde .env
 }
 
 BATCH_SIZE = 10000
@@ -134,7 +134,7 @@ STAGING_CLEAN_SCHEMA = "staging_clean"
 ```bash
 MSSQL_SERVER=localhost,1433
 MSSQL_SA_USER=sa
-MSSQL_SA_PASSWORD=YourPassword123!
+MSSQL_SA_PASSWORD=<tu-password-sa>
 MSSQL_DATABASE=master
 ```
 
@@ -211,7 +211,7 @@ TOTAL:          111.1s
 ### 1. Verificar datos en SQL Server
 
 ```sql
--- Conectar a: localhost,1433 (sa / YourPassword123!)
+-- Conectar a: localhost,1433 (sa / password de tu .env)
 
 -- Contar filas en staging_raw
 SELECT 
@@ -245,7 +245,7 @@ cat logs/etl_*.log | tail -50
 | `MAX_RETRIES` | config.py | 3 | Reintentos en caso de error |
 | `NULL_THRESHOLD` | config.py | 0.1 (10%) | % nulls permitidos |
 | `MSSQL_SERVER` | .env | localhost,1433 | Host de SQL Server |
-| `MSSQL_SA_PASSWORD` | .env | YourPassword123! | Password SA |
+| `MSSQL_SA_PASSWORD` | .env | (secreto, no versionado) | Password SA |
 
 ---
 

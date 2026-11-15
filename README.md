@@ -1,275 +1,64 @@
-# Plataforma Integral de Ingeniería de Datos y Analítica Inteligente
+# Plataforma de Ingenieria de Datos y Analitica Inteligente — WideWorldImporters
 
-**Estado**: 🚀 En desarrollo (Fase 1: Descubrimiento)
-
-## 📋 Descripción del Proyecto
-
-Plataforma end-to-end que transforma datos operacionales de **WideWorldImporters** en análisis descriptivo, predicciones inteligentes y explicaciones generativas. Integra:
-
-- **ETL/ELT**: Extracción, transformación y carga de datos
-- **Data Warehouse**: Modelo dimensional (Star Schema)
-- **Business Intelligence**: Dashboard web interactivo
-- **Machine Learning**: Modelo predictivo de ventas
-- **Generative AI**: Asistente analítico inteligente
-- **Automatización**: Alertas y notificaciones
-
----
-
-## 🎯 Objetivos
-
-1. ✅ Analizar base relacional e identificar entidades y oportunidades
-2. ✅ Diseñar ETL con staging raw + clean
-3. ✅ Construir Data Warehouse dimensional (SQL Server)
-4. ✅ Crear dashboard web consultando el DW
-5. ✅ Entrenar modelo ML con evaluación correcta
-6. ✅ Integrar IA generativa para consultas analíticas
-7. ✅ Implementar alertas automatizadas
-8. ✅ Documentar, probar y demostrar la solución
-
----
-
-## 🏗️ Arquitectura (Capas)
+Plataforma end-to-end sobre la base **WideWorldImporters** (SQL Server): ETL con staging, Data Warehouse dimensional, dashboard web, modelo predictivo, asistente de IA generativa local y alertas automaticas.
 
 ```
-┌─────────────────────────────────────────────────────┐
-│          Capa de Presentación (Frontend React)      │
-│          Dashboard con KPIs, Filtros, Alertas        │
-└──────────────────┬──────────────────────────────────┘
-                   │
-┌──────────────────▼──────────────────────────────────┐
-│           Capa de API (Backend FastAPI)              │
-│      Rutas, Autenticación, Lógica de Negocios       │
-└──────────────────┬──────────────────────────────────┘
-                   │
-    ┌──────────────┼──────────────┐
-    │              │              │
-┌───▼────┐  ┌─────▼─────┐  ┌────▼──────┐
-│Data    │  │Machine    │  │Generative │
-│WH      │  │Learning   │  │AI         │
-│(SQL)   │  │(Python)   │  │(Ollama)   │
-└────────┘  └───────────┘  └───────────┘
+SQL Server (origen) ─► ETL Python (staging_raw/clean) ─► Data Warehouse (dw) ─► vistas bi
+                                                                                   │
+        React (Vite + Recharts) ◄── API Node.js/Express (JWT) ◄───────────────────┤
+              ▲  WebSocket (alertas)        │                                      │
+              │                             ├─► Ollama (qwen2.5:3b, local)         │
+              │                             └─► motor de alertas (reglas/ML/IA)    │
+              └──────────── scikit-learn: pronostico semanal ──► ops.ml_* ◄────────┘
 ```
 
----
+## Estado por fase
 
-## 🗂️ Estructura del Repositorio
+| Fase | Contenido | Documentacion |
+|---|---|---|
+| 1–2 | Descubrimiento y diseno | [01](documentation/01_FASE_1_DESCUBRIMIENTO.md), [02](documentation/02_FASE_2_DISEÑO.md) |
+| 3 | ETL y calidad (staging raw/clean) | [03](documentation/03_FASE_3_ETL_Y_CALIDAD.md), [etl/README.md](etl/README.md) |
+| 4 | Data Warehouse, SCD, reconciliacion, diccionario | [04](documentation/04_DATA_WAREHOUSE.md), [DICCIONARIO_DATOS.md](documentation/DICCIONARIO_DATOS.md) |
+| 5 | BI: backend Node.js + dashboard React, KPIs | [05](documentation/05_BI_Y_KPIS.md) |
+| 6 | Machine learning (pronostico de ventas) | [machine-learning/README.md](machine-learning/README.md) |
+| 7 | IA generativa con Ollama | [generative-ai/README.md](generative-ai/README.md) |
+| 8 | Alertas, WebSocket, correo | [06](documentation/06_AUTOMATIZACION_ALERTAS.md) |
+| 9 | Seguridad, operacion, runbook | [07](documentation/07_SEGURIDAD_Y_OPERACION.md) |
+| — | Informe final y guia de usuario | [FINAL_REPORT.md](FINAL_REPORT.md), [GUIA_USUARIO.md](documentation/GUIA_USUARIO.md) |
 
-```
-Examen-Tecnologia-emergentes/
-├── documentation/          # Documentación técnica
-│   ├── ARQUITECTURA.md
-│   ├── MODELO_DIMENSIONAL.md
-│   ├── GUIA_INSTALACION.md
-│   ├── ERD.md
-│   └── DICCIONARIO_DATOS.md
-├── database/              # Scripts SQL
-│   ├── init/              # Creación de bases
-│   ├── staging/           # Tablas raw + clean
-│   └── warehouse/         # Modelo dimensional
-├── etl/                   # Pipeline de datos (Python)
-│   ├── extract.py
-│   ├── transform.py
-│   ├── load.py
-│   ├── audit.py
-│   └── requirements.txt
-├── backend/               # API FastAPI
-│   ├── main.py
-│   ├── app/
-│   │   ├── routes.py
-│   │   ├── schemas.py
-│   │   └── database.py
-│   └── requirements.txt
-├── frontend/              # React
-│   ├── src/
-│   │   ├── App.jsx
-│   │   ├── pages/
-│   │   ├── components/
-│   │   └── services/
-│   ├── package.json
-│   └── .env.example
-├── machine-learning/      # Modelo predictivo
-│   ├── train_model.py
-│   ├── model.pkl
-│   └── requirements.txt
-├── generative-ai/         # Asistente IA
-│   ├── ai_assistant.py
-│   └── requirements.txt
-├── tests/                 # Pruebas unitarias
-├── deployment/            # Docker & Compose
-│   └── docker-compose.yml
-├── .env.example           # Variables de entorno
-├── README.md              # Este archivo
-└── .gitignore
+## Puesta en marcha
+
+Requisitos: Docker Desktop, Python 3.11+, Node.js 20+, ODBC Driver 17 para SQL Server, y el respaldo `WideWorldImporters-Full.bak` en `database/backups/` (no se versiona).
+
+```powershell
+copy .env.example .env                                       # completa los valores (ver comentarios)
+docker compose -f docker-compose-simple.yml up -d            # SQL Server + Ollama
+docker exec ollama ollama pull qwen2.5:3b                    # primera vez (~1.9 GB)
+pip install -r requirements.txt
+python database/apply_dw_layer.py                            # vistas bi, tablas ops, cuenta wwi_app
+cd backend;  npm install; npm run seed; npm start            # API http://localhost:4000
+cd frontend; npm install; npm run dev                        # UI  http://localhost:5173
 ```
 
----
+Si el DW aun no existe, ejecutar primero el ETL (ver runbook en [07](documentation/07_SEGURIDAD_Y_OPERACION.md)). Usuarios demo: `admin` y `analyst`, con las contrasenas `DEMO_ADMIN_PASSWORD` / `DEMO_ANALYST_PASSWORD` de tu `.env`.
 
-## 🚀 Inicio Rápido (Docker Compose)
+## Pruebas
 
-### Prerequisitos
-- Docker Desktop instalado
-- Git configurado
-
-### Pasos
-
-1. **Clonar repositorio**
-```bash
-git clone https://github.com/JamilHerrera/Examen-Tecnologia-emergentes.git
-cd Examen-Tecnologia-emergentes
+```powershell
+cd backend; npm test                      # 39 pruebas: API/KPIs vs origen, seguridad, alertas, WebSocket, asistente
+node generative-ai/run_eval.mjs           # 15 preguntas al asistente (requiere Ollama) -> RESULTADOS_PRUEBAS.md
+python etl/dw_reconcile.py                # reconciliacion origen vs DW (10 comprobaciones)
+python machine-learning/predict.py --evaluate
 ```
 
-2. **Configurar variables de entorno**
-```bash
-cp .env.example .env
-# Edita .env con tus valores
+## Estructura
+
 ```
-
-3. **Iniciar servicios con Docker Compose**
-```bash
-docker-compose -f deployment/docker-compose.yml up -d
+backend/            API Node.js (Express, mssql, JWT, ws, nodemailer) + pruebas
+frontend/           React + Vite + Recharts
+etl/                Extraccion, transformacion, carga, DW, reconciliacion
+database/           Scripts SQL (staging, bi, ops) y aplicador
+machine-learning/   Variables, entrenamiento, prediccion, model card
+generative-ai/      Casos de prueba y evaluacion del asistente (la logica vive en backend/src/assistant)
+documentation/      Fases, diccionario de datos, guia de usuario
 ```
-
-4. **Esperar a que SQL Server esté listo (~30 segundos)**
-```bash
-docker-compose -f deployment/docker-compose.yml logs mssql
-```
-
-5. **Ejecutar scripts de inicialización**
-```bash
-# Desde dentro del contenedor o con sqlcmd
-docker-compose -f deployment/docker-compose.yml exec mssql sqlcmd -S localhost -U sa -P YourSecurePassword123! -i /init/01_create_databases.sql
-```
-
-6. **Ejecutar ETL**
-```bash
-cd etl
-python -m pip install -r requirements.txt
-python main.py --phase extract
-python main.py --phase transform
-python main.py --phase load
-```
-
-7. **Iniciar Backend**
-```bash
-cd backend
-python -m pip install -r requirements.txt
-python main.py
-# Backend disponible en http://localhost:8000
-```
-
-8. **Iniciar Frontend**
-```bash
-cd frontend
-npm install
-npm start
-# Frontend disponible en http://localhost:3000
-```
-
----
-
-## 📊 Fases del Proyecto (3 días)
-
-| Fase | Duración | Actividades |
-|------|----------|------------|
-| **1. Descubrimiento** | 3-4h | Dataset, ERD, Diccionario, Preguntas analíticas |
-| **2. Diseño** | 2-3h | Arquitectura, Modelo Dimensional, Stack |
-| **3. ETL & Calidad** | 12-15h | Extracción, Staging, Limpieza, Auditoría |
-| **4. Data Warehouse** | 8-10h | FactSales + Dimensiones, Carga, Reconciliación |
-| **5. BI Dashboard** | 10-12h | API + Frontend, KPIs, Filtros |
-| **6. ML** | 6-8h | Modelo Predictivo, Baseline, Evaluación |
-| **7. GenAI + Alertas** | 5h | Asistente IA, Alertas Automáticas |
-| **8. Cierre** | 3-4h | Documentación, README, Pruebas, Video |
-
----
-
-## 🛢️ Dataset
-
-**WideWorldImporters** (SQL Server) - Base comercial con:
-- Clientes, proveedores, productos
-- Órdenes de venta y compra
-- Inventario, movimientos
-- Personas, ciudades, entidades
-
-→ Ideal para análisis de ventas, predicciones y segmentación.
-
----
-
-## 🔐 Seguridad & Buenas Prácticas
-
-✅ `.env.example` sin credenciales  
-✅ Contraseñas en variables de entorno  
-✅ Consultas parametrizadas (sin SQL injection)  
-✅ Mínimo privilegio en cuentas de BD  
-✅ Backend consume DW, no frontend directo  
-✅ GenAI consulta datos autorizados  
-✅ Repositorio libre de secretos  
-
----
-
-## 🧪 Pruebas
-
-```bash
-# Ejecutar suite de pruebas
-pytest tests/ -v
-
-# Pruebas específicas
-pytest tests/test_etl.py -v
-pytest tests/test_api.py -v
-pytest tests/test_ml.py -v
-```
-
----
-
-## 📖 Documentación
-
-Consulta la carpeta `documentation/` para:
-- `ARQUITECTURA.md` - Diagrama e integración de capas
-- `MODELO_DIMENSIONAL.md` - Grano, hechos, dimensiones, SCD
-- `GUIA_INSTALACION.md` - Pasos detallados de despliegue
-- `ERD.md` - Entity Relationship Diagram (origen)
-- `DICCIONARIO_DATOS.md` - Definición de campos y tablas
-
----
-
-## 🤝 Contribuciones
-
-Este es un proyecto académico. Para cambios:
-1. Crea una rama: `git checkout -b feature/tu-feature`
-2. Realiza commits descriptivos
-3. Push y crea Pull Request
-
----
-
-## 📝 Notas de Desarrollo
-
-- **Staging**: Conserva raw (original) y clean (procesado)
-- **Idempotencia**: Reejecutar ETL no duplica datos
-- **Reconciliación**: Valida conteos origen → staging → DW
-- **Data Leakage**: ML solo usa train/val, nunca test
-- **Logs**: Todo proceso registra ejecución y errores
-
----
-
-## 🎬 Demo Final
-
-Video de 5 minutos demostrando:
-- Caso de uso y arquitectura
-- ETL extrayendo y transformando
-- Modelo dimensional y consultas
-- Dashboard interactivo con KPIs
-- Modelo ML con predicción
-- Asistente GenAI respondiendo preguntas
-- Alerta automatizada disparándose
-
----
-
-## 📧 Contacto
-
-**Desarrollo**: Jamil Herrera  
-**Correo**: [email del usuario]  
-**Repositorio**: https://github.com/JamilHerrera/Examen-Tecnologia-emergentes
-
----
-
-**Última actualización**: Noviembre 2026  
-**Versión**: 1.0 (En desarrollo)

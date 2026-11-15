@@ -15,9 +15,22 @@ from etl.extract import extract_phase, DatabaseConnector
 from etl.transform import transform_phase
 from etl.load import load_phase
 from etl.audit import audit_phase
+from etl.ops_log import start_run, finish_run
 
 
 def run_etl_pipeline():
+    """Execute complete ETL pipeline (registra la ejecucion en ops.etl_run_log)."""
+    run_id = start_run("etl_staging_pipeline")
+    try:
+        ok = _run_etl_pipeline()
+        finish_run(run_id, "success" if ok else "failed", message="Pipeline ETL completado" if ok else "Pipeline ETL fallo; revisar logs/")
+        return ok
+    except Exception as exc:
+        finish_run(run_id, "failed", message=str(exc))
+        raise
+
+
+def _run_etl_pipeline():
     """Execute complete ETL pipeline"""
     
     start_time = time.time()

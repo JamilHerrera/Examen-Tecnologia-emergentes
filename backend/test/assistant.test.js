@@ -2,7 +2,7 @@ import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { parsePeriod } from '../src/assistant/periods.js';
 import { routeByRules } from '../src/assistant/router.js';
-import { findUnverifiedNumbers } from '../src/assistant/verify.js';
+import { findDirectionContradictions, findTranslatedNames, findUnverifiedNumbers } from '../src/assistant/verify.js';
 
 const data = { firstDate: '2013-01-01', lastDate: '2016-05-31' };
 
@@ -62,4 +62,17 @@ test('verificador detecta cifras que no estan en los hechos y tolera redondeo', 
   assert.deepEqual(findUnverifiedNumbers('Las ventas fueron $13,518,732, un +4.7%.', facts), []);
   assert.deepEqual(findUnverifiedNumbers('Fueron 13.5 millones de dolares.', facts), []);
   assert.deepEqual(findUnverifiedNumbers('Las ventas fueron $20,000,000 en 2016.', facts), ['$20,000,000']);
+});
+
+test('verificador detecta direccion contradictoria (disminucion de un valor que subio)', () => {
+  const facts = ['Ventas netas: $4,807,111 vs $4,099,480 (+17.3%).', 'Pedidos: 5,619 vs 5,750 (-2.3%).', 'Clientes activos: 660 vs 657 (+0.5%).'];
+  assert.deepEqual(findDirectionContradictions('Esto representa una disminución del 17.3% frente a febrero.', facts), ['17.3%']);
+  assert.deepEqual(findDirectionContradictions('Las ventas crecieron 17.3% y los pedidos bajaron 2.3%.', facts), []);
+  assert.deepEqual(findDirectionContradictions('Hubo un descenso en pedidos (-2.3%) y en clientes activos (+0.5%).', facts), ['+0.5%']);
+});
+
+test('verificador detecta nombres de categoria traducidos', () => {
+  const facts = ['Categoria Novelty Items: $3,026,792 (+15.6%).'];
+  assert.deepEqual(findTranslatedNames('La categoría Novelty Items crecio.', facts), []);
+  assert.equal(findTranslatedNames('La categoría de Novedad Items crecio.', facts).length, 1);
 });
