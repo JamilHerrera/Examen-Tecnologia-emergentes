@@ -100,11 +100,16 @@ def profile_dataframe(frame, top_values=5):
             pd.api.types.is_object_dtype(series)
             or isinstance(series.dtype, pd.CategoricalDtype)
         ):
-            counts = non_null.astype(str).value_counts().head(top_values)
-            profile["top_values"] = [
-                {"value": str(value), "count": int(count)}
-                for value, count in counts.items()
-            ]
+            has_binary_values = any(
+                isinstance(value, (bytes, bytearray, memoryview))
+                for value in non_null
+            )
+            if not has_binary_values:
+                counts = non_null.astype(str).value_counts().head(top_values)
+                profile["top_values"] = [
+                    {"value": str(value), "count": int(count)}
+                    for value, count in counts.items()
+                ]
         columns[str(name)] = profile
     return {"row_count": row_count, "column_count": len(frame.columns), "columns": columns}
 

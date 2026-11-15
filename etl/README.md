@@ -62,7 +62,7 @@ Para reconstruir staging desde cero, usar explícitamente:
 python etl/main.py --mode full
 ```
 
-La opcion `--max-retries` (predeterminada: 3) reintenta solo la carga transaccional, sin repetir la extraccion; `--retry-delay` controla la espera en segundos. La auditoria por ejecucion incluye conteos por tabla/capa en `ops.etl_table_run`, perfiles JSON en `ops.etl_profile` y un informe local en `logs/profiling/`.
+La opcion `--max-retries` (predeterminada: 3) reintenta solo la carga transaccional, sin repetir la extraccion; `--retry-delay` controla la espera en segundos. La auditoria por ejecucion incluye conteos por tabla/capa en `ops.etl_table_run`, perfiles JSON en `ops.etl_profile` y un informe local en `logs/profiling/`. Las columnas con valores binarios conservan sus conteos, pero no registran valores frecuentes.
 
 Antes de ejecutar el ETL, la capa `ops` debe estar aplicada con `python database/apply_dw_layer.py` despues de crear el DW. El pipeline de staging no sustituye la carga dimensional `dw_schema.py`, `dw_dimensions.py`, `dw_customer_scd2.py`, `dw_facts.py` y `dw_enrich.py`. Carga el historial de clientes despues de las dimensiones y antes de los hechos. Despues de aplicar `database/apply_dw_layer.py`, `dw_analytics.py` carga compras, rentabilidad por factura y movimientos/snapshot de inventario directamente desde WideWorldImporters.
 

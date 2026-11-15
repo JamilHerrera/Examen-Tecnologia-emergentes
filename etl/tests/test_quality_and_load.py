@@ -6,6 +6,7 @@ import pandas as pd
 from etl.audit import DataQualityMetrics
 from etl.extract import DataExtractor
 from etl.load import StagingLoader, load_phase
+from etl.reliability import profile_dataframe
 from etl.transform import DataCleaner
 
 
@@ -93,6 +94,17 @@ class QualityMetricTests(unittest.TestCase):
         ]
         self.assertIsNone(metrics["consistency_score"])
         self.assertEqual(metrics["overall_quality_score"], sum(measured_scores) / 3)
+
+
+class DataProfileTests(unittest.TestCase):
+    def test_binary_columns_skip_top_values_without_decoding_or_exposing_values(self):
+        frame = pd.DataFrame({"HashedPassword": [b"\x9b\x00\xff", b"\x9b\x00\xff", None]})
+
+        profile = profile_dataframe(frame)["columns"]["HashedPassword"]
+
+        self.assertEqual(profile["null_count"], 1)
+        self.assertEqual(profile["distinct_count"], 1)
+        self.assertNotIn("top_values", profile)
 
 
 class StagingLoaderTests(unittest.TestCase):
