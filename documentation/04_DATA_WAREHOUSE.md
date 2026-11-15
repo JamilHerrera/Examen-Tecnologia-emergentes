@@ -62,7 +62,7 @@ Para evitar multiplicar importes se une cada dimension por su clave sustituta un
 
 ## 5. Reconciliacion origen → staging → DW
 
-Resultado de `python etl/dw_reconcile.py` (guardado en `ops.reconciliation_result`, visible en la pestana *Operacion* del dashboard):
+Resultado de `python etl/dw_reconcile.py` (24 comprobaciones, todas superadas; guardado en `ops.reconciliation_result`, visible en la pestana *Operacion* del dashboard). La tabla muestra las 13 comprobaciones de ventas y dimensiones; las otras 11 cubren rentabilidad, compras, proveedores, movimientos, snapshot y huerfanos de esos hechos (seccion 8):
 
 | Comprobacion | Origen | DW | OK |
 |---|---|---|---|

@@ -18,5 +18,11 @@ Lista de alertas con severidad, origen (regla / modelo / IA generativa) y estado
 ## 4. Asistente IA
 Escribe una pregunta (max. 300 caracteres) o usa los ejemplos. La respuesta muestra: los datos consultados al DW con su periodo, la **interpretacion generada por IA** (si supera la verificacion de cifras), las fuentes y la fecha de los datos. Si pides algo sin respaldo en los datos, responde "No hay datos suficientes". No ejecuta SQL ni entrega datos personales. La primera respuesta puede tardar ~1 minuto mientras Ollama carga el modelo.
 
-## 5. Operacion
+## 5. Negocio: compras, rentabilidad e inventario
+Elige la pestana **Negocio** y un rango de fechas (por defecto, los ultimos 12 meses con datos). Tiene tres secciones; todos los importes estan en **GBP**:
+- **Compras:** compras netas (antes de impuestos) por mes, por proveedor y por producto; unidades recibidas y ordenes.
+- **Rentabilidad:** ventas facturadas, utilidad y margen por mes, categoria y producto (fuente: lineas de factura de venta).
+- **Inventario:** entradas, salidas y ajustes por mes, y el **snapshot** de existencias al 31-may-2016 con los articulos bajo el punto de reorden. Los saldos historicos no se muestran porque el origen no los concilia.
+
+## 6. Operacion
 Estado del ETL y del DW (ultima carga, reconciliacion origen vs DW, historial de ejecuciones), definicion de cada KPI y, para `admin`, tiempos de respuesta de la API.

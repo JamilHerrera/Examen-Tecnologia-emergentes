@@ -15,7 +15,7 @@ Limitaciones: HTTPS no esta configurado (demo local; poner un proxy TLS en produ
 
 ## Monitoreo operativo
 
-- Pestana **Operacion** del dashboard: ultima carga del DW, ultima ejecucion exitosa, filas del hecho, reconciliacion origen vs DW (10 comprobaciones), historial de ejecuciones y tiempos de respuesta por ruta (admin).
+- Pestana **Operacion** del dashboard: ultima carga del DW, ultima ejecucion exitosa, filas del hecho, reconciliacion origen vs DW (24 comprobaciones), historial de ejecuciones y tiempos de respuesta por ruta (admin).
 - `ops.etl_run_log` registra: pipeline ETL (`etl/main.py`), reconciliacion (`etl/dw_reconcile.py`), entrenamiento ML (`machine-learning/train.py`) y evaluaciones de alertas.
 - Logs de ETL en `logs/etl_*.log`; el backend registra errores internos en consola sin exponer detalles al cliente.
 - Alertas de fallo: una reconciliacion con diferencias deja la corrida en `warning`. (Pendiente como mejora: alerta automatica ante `failed`.)
