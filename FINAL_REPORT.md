@@ -20,14 +20,14 @@ La plataforma integra WideWorldImporters con un ETL en Python, un Data Warehouse
 | Docker y servicios | Docker Engine 27.5.1; `sql-server-2022` y `ollama` activos. Ollama tiene `qwen2.5:3b`. |
 | Suite completa del backend | 33/33 pruebas pasaron con SQL Server disponible (`npm test` desde `backend`). |
 | Compilacion React | Exitosa; Vite transformo 403 modulos. El chunk JavaScript minificado es de 664.94 kB (194.31 kB gzip), sobre el umbral de advertencia de 500 kB. |
-| Reconciliacion de datos | 10/10 comprobaciones pasaron (RunID 10002). Origen, staging limpio y `dw.FactSales` coinciden en 231,412 lineas y $177,634,276.40 en ventas netas; no hay hechos huerfanos ni geografia desconocida. |
+| Reconciliacion de datos | 10/10 comprobaciones pasaron (RunID 10005). Origen, staging limpio y `dw.FactSales` coinciden en 231,412 lineas y $177,634,276.40 en ventas netas; no hay hechos huerfanos ni geografia desconocida. |
 | Pruebas ETL | 4/4 pruebas unitarias pasaron. Integracion con SQL Server: carga correcta 2/2; rechazo inyectado 1/3 en staging raw devolvio fallo y conteos exactos. Las tablas de prueba fueron eliminadas. |
 | Migracion de auditoria | Se verifico en SQL Server `ops.assistant_audit.Outcome` como `nvarchar(40)`; se aplico el `ALTER` solo si el ancho anterior lo requeria. |
 | Entrenamiento ML | Exitoso; selecciono `rf_leaf5`. MAE de validacion: $87,715 vs $110,552 de la base; MAE de prueba: $127,721 vs $130,476; MAPE de prueba: 12.0% vs 12.1%. Modelo registrado: `sales-weekly-202611151623`. |
 | Evaluacion de deriva ML | `predict.py --evaluate` no encontro predicciones cuyo periodo objetivo ya tenga ventas reales completas. Por tanto, no hay una metrica de deriva observada; la prueba temporal de entrenamiento anterior si se evaluo. |
 | Evaluacion Ollama | 15/15 casos pasaron los checks automatizados de intencion, resultado y hechos, con corroboracion independiente para los casos configurados. **No mide exactitud semantica.** En los casos 3 y 8 el verificador descarto borradores por traduccion de nombres y direccion contradictoria, respectivamente. |
 | Sintaxis Python | `etl/load.py`, `etl/audit.py` y sus pruebas compilaron con Python 3.15.2; `etl/main.py`, `etl/ops_log.py` y `database/generate_data_dictionary.py` compilaron en una comprobacion previa. |
-| ETL completo de staging | No se volvio a ejecutar: inserta filas individualmente y puede tardar cerca de una hora. La reconciliacion confirma igualdad de conteos de staging limpio y DW, pero no sustituye una auditoria de cada insercion. |
+| ETL completo de staging | Completado sin fallos: 605,176/605,176 filas en cada capa (raw y clean), 10 tablas por capa y auditoria completada. La carga tomo 2,767.07 s; la reconciliacion posterior paso 10/10 comprobaciones (RunID 10005). |
 
 ## Resultados historicos y limites de interpretacion
 
@@ -48,7 +48,6 @@ El asistente muestra los hechos consultados por separado de la interpretacion de
 
 ## Trabajo pendiente para el cierre del proyecto
 
-- Reejecutar el ETL completo en una ventana controlada para validar la nueva propagacion de errores de carga sobre todas las tablas fuente.
 - Implementar/cargar el historial SCD tipo 2 desde `Sales.Customers_Archive`.
 - Fortalecer la evaluacion semantica del asistente; los checks actuales no certifican la veracidad general de sus interpretaciones.
 - Rotar y evaluar la credencial antigua presente en el historial Git antes de hacer publico el repositorio.
