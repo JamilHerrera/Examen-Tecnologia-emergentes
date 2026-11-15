@@ -1,21 +1,24 @@
-"""
+﻿"""
 FASE 4.3: Populate FactSales Table
 Loads ~605K rows of sales facts from staging_clean tables into dw.FactSales
 Joins with dimension tables to resolve surrogate keys
 """
 
+import os
 import pyodbc
 from datetime import datetime
 from typing import List, Tuple
 import logging
+from dotenv import load_dotenv
 
-# Configuration
+load_dotenv()
+
 SQL_SERVER_CONFIG = {
     "driver": "ODBC Driver 17 for SQL Server",
-    "server": "localhost,1433",
-    "database": "WideWorldImporters",
-    "user": "sa",
-    "password": "P@ssw0rd123",
+    "server": os.getenv("MSSQL_SERVER", "localhost,1433"),
+    "database": os.getenv("MSSQL_DATABASE", "WideWorldImporters"),
+    "user": os.getenv("MSSQL_SA_USER", "sa"),
+    "password": os.environ["MSSQL_SA_PASSWORD"],
     "encrypt": "no",
     "trust_certificate": "yes",
 }
@@ -51,14 +54,14 @@ def populate_factsales():
     Process:
     1. Join Sales_Orders_clean with Sales_OrderLines_clean
     2. Resolve surrogate keys from dimension tables
-    3. Calculate LineAmount = Quantity × UnitPrice × (1 - TaxRate/100)
+    3. Calculate LineAmount = Quantity Ã— UnitPrice Ã— (1 - TaxRate/100)
     4. Insert facts into dw.FactSales
     """
     conn = DatabaseConnector(SQL_SERVER_CONFIG)
     conn.connect()
     cursor = conn.connection.cursor()
 
-    print("\n📊 POPULATING FactSales...")
+    print("\nðŸ“Š POPULATING FactSales...")
     print("-" * 80)
 
     try:
@@ -75,7 +78,7 @@ def populate_factsales():
         insert_query = """
         INSERT INTO dw.FactSales 
         (DateKey, CustomerKey, ProductKey, GeographyKey, OrderID, OrderLineID, 
-         Quantity, UnitPrice, Discount, LineTotal, OrderStatus, LoadedDate)
+         Quantity, UnitPrice, TaxRate, LineTotal, OrderStatus, LoadedDate)
         SELECT
             COALESCE(dd.DateKey, -1) AS DateKey,
             COALESCE(dc.CustomerKey, -1) AS CustomerKey,
@@ -85,7 +88,7 @@ def populate_factsales():
             CAST(ROUND(CAST(sol.OrderLineID AS FLOAT), 0) AS INT) AS OrderLineID,
             CAST(ROUND(CAST(sol.Quantity AS FLOAT), 0) AS INT) AS Quantity,
             CAST(COALESCE(sol.UnitPrice, '0') AS DECIMAL(10, 2)) AS UnitPrice,
-            CAST(COALESCE(sol.TaxRate, '0') AS DECIMAL(5, 2)) / 100.0 AS Discount,
+            CAST(COALESCE(sol.TaxRate, '0') AS DECIMAL(5, 2)) / 100.0 AS TaxRate,
             CAST(
                 CAST(ROUND(CAST(sol.Quantity AS FLOAT), 0) AS DECIMAL(10, 2)) 
                 * CAST(COALESCE(sol.UnitPrice, '0') AS DECIMAL(10, 2))
@@ -106,7 +109,7 @@ def populate_factsales():
         # Step 3: Verify insert
         cursor.execute("SELECT COUNT(*) FROM dw.FactSales")
         inserted_rows = cursor.fetchone()[0]
-        print(f"  ✓ Inserted {inserted_rows:,}/{expected_rows:,} facts")
+        print(f"  âœ“ Inserted {inserted_rows:,}/{expected_rows:,} facts")
 
         # Step 4: Get statistics
         cursor.execute("""
@@ -122,7 +125,7 @@ def populate_factsales():
         """)
         
         result = cursor.fetchone()
-        print(f"\n  📈 FactSales Statistics:")
+        print(f"\n  ðŸ“ˆ FactSales Statistics:")
         print(f"     Unique Orders:      {result[0]:,}")
         print(f"     Unique Products:    {result[1]:,}")
         print(f"     Unique Customers:   {result[2]:,}")
@@ -141,17 +144,17 @@ def populate_factsales():
         """)
         
         result = cursor.fetchone()
-        print(f"\n  ⚠️  Data Quality Check:")
+        print(f"\n  âš ï¸  Data Quality Check:")
         print(f"     Missing Customers:  {result[0]:,}")
         print(f"     Missing Products:   {result[1]:,}")
         print(f"     Missing Dates:      {result[2]:,}")
 
-        print(f"\n  ✅ FactSales populated: {inserted_rows:,} rows")
+        print(f"\n  âœ… FactSales populated: {inserted_rows:,} rows")
         conn.disconnect()
         return inserted_rows
 
     except Exception as e:
-        print(f"\n  ❌ Error inserting facts: {str(e)}")
+        print(f"\n  âŒ Error inserting facts: {str(e)}")
         conn.disconnect()
         raise
 
@@ -162,7 +165,7 @@ def verify_factsales():
     conn.connect()
     cursor = conn.connection.cursor()
 
-    print("\n✅ VERIFYING FactSales...")
+    print("\nâœ… VERIFYING FactSales...")
     print("-" * 80)
 
     try:
@@ -175,7 +178,7 @@ def verify_factsales():
 
         print(f"  FactSales rows:           {fact_rows:,}")
         print(f"  Staging OrderLines rows:  {staging_rows:,}")
-        print(f"  Match:                    {'✓ YES' if fact_rows == staging_rows else '✗ NO'}")
+        print(f"  Match:                    {'âœ“ YES' if fact_rows == staging_rows else 'âœ— NO'}")
 
         # Check for NULL values in critical columns
         cursor.execute("""
@@ -205,27 +208,27 @@ def verify_factsales():
                 fs.DateKey,
                 fs.Quantity,
                 fs.UnitPrice,
-                fs.Discount,
+                fs.TaxRate,
                 fs.LineTotal
             FROM dw.FactSales fs
         """)
         
         print(f"\n  Sample rows:")
-        print(f"    FactKey | OrderID | LineID | CustKey | ProdKey | DateKey | Qty | Price | Discount | LineTotal")
+        print(f"    FactKey | OrderID | LineID | CustKey | ProdKey | DateKey | Qty | Price | TaxRate | LineTotal")
         for row in cursor.fetchall():
             print(f"    {row[0]:7} | {row[1]:7} | {row[2]:6} | {row[3]:7} | {row[4]:7} | {row[5]:7} | {row[6]:3} | {row[7]:5} | {row[8]:8} | {row[9]:9.2f}")
 
         conn.disconnect()
 
     except Exception as e:
-        print(f"\n  ❌ Error verifying facts: {str(e)}")
+        print(f"\n  âŒ Error verifying facts: {str(e)}")
         conn.disconnect()
         raise
 
 
 if __name__ == "__main__":
     print("\n" + "=" * 80)
-    print("🚀 FASE 4.3: POPULATE FACTSALES")
+    print("ðŸš€ FASE 4.3: POPULATE FACTSALES")
     print("=" * 80)
 
     try:
@@ -233,9 +236,10 @@ if __name__ == "__main__":
         verify_factsales()
 
         print("\n" + "=" * 80)
-        print("✅ FASE 4.3 COMPLETADA - FactSales Populated")
+        print("âœ… FASE 4.3 COMPLETADA - FactSales Populated")
         print("=" * 80 + "\n")
 
     except Exception as e:
-        print(f"\n❌ Error in Phase 4.3: {str(e)}")
+        print(f"\nâŒ Error in Phase 4.3: {str(e)}")
         raise
+

@@ -6,14 +6,17 @@ import os
 from typing import Dict, Any
 from datetime import datetime
 import logging
+from dotenv import load_dotenv
 
-# Database Connections
+load_dotenv()
+
+# Database Connections (credentials come from .env, never from source code)
 SQL_SERVER_CONFIG: Dict[str, Any] = {
     "driver": "ODBC Driver 17 for SQL Server",
     "server": os.getenv("MSSQL_SERVER", "localhost,1433"),
     "database": os.getenv("MSSQL_DATABASE", "WideWorldImporters"),
     "user": os.getenv("MSSQL_SA_USER", "sa"),
-    "password": os.getenv("MSSQL_SA_PASSWORD", "P@ssw0rd123"),
+    "password": os.environ["MSSQL_SA_PASSWORD"],
     "encrypt": "no",
     "trust_certificate": "yes",
 }

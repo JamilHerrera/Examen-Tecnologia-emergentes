@@ -3,17 +3,20 @@ FASE 4.4: Data Warehouse Audit & Validation
 Comprehensive quality checks and reconciliation of the data warehouse
 """
 
+import os
 import pyodbc
 from datetime import datetime
 from typing import Dict, List, Tuple
+from dotenv import load_dotenv
 
-# Configuration
+load_dotenv()
+
 SQL_SERVER_CONFIG = {
     "driver": "ODBC Driver 17 for SQL Server",
-    "server": "localhost,1433",
-    "database": "WideWorldImporters",
-    "user": "sa",
-    "password": "P@ssw0rd123",
+    "server": os.getenv("MSSQL_SERVER", "localhost,1433"),
+    "database": os.getenv("MSSQL_DATABASE", "WideWorldImporters"),
+    "user": os.getenv("MSSQL_SA_USER", "sa"),
+    "password": os.environ["MSSQL_SA_PASSWORD"],
     "encrypt": "no",
     "trust_certificate": "yes",
 }

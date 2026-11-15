@@ -132,7 +132,7 @@ def create_dw_schema():
             -- Measures (additive)
             Quantity INT NOT NULL,
             UnitPrice DECIMAL(18,2) NOT NULL,
-            Discount DECIMAL(5,2) DEFAULT 0,
+            TaxRate DECIMAL(5,2) DEFAULT 0,
             LineTotal DECIMAL(18,2) NOT NULL,
             
             -- Contextual Attributes
