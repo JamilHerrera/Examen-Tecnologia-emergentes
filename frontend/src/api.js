@@ -47,6 +47,29 @@ export function useApi(path, deps = []) {
   return { ...state, reload: load };
 }
 
+/** Conecta al WebSocket de alertas (autenticacion con el primer mensaje) y reconecta si se cae. */
+export function connectAlertSocket(onAlert, onState = () => {}) {
+  let socket;
+  let closed = false;
+  let retry;
+  const open = () => {
+    const proto = location.protocol === 'https:' ? 'wss' : 'ws';
+    socket = new WebSocket(`${proto}://${location.host}/ws`);
+    socket.onopen = () => socket.send(JSON.stringify({ type: 'auth', token: auth.token }));
+    socket.onmessage = (ev) => {
+      const msg = JSON.parse(ev.data);
+      if (msg.type === 'ready') onState('connected');
+      if (msg.type === 'alert') onAlert(msg.alert);
+    };
+    socket.onclose = () => {
+      onState('disconnected');
+      if (!closed) retry = setTimeout(open, 5000);
+    };
+  };
+  open();
+  return () => { closed = true; clearTimeout(retry); socket?.close(); };
+}
+
 export const fmt = {
   money: (v) => (v == null ? '—' : new Intl.NumberFormat('en-US', { style: 'currency', currency: 'USD', maximumFractionDigits: 0 }).format(v)),
   money2: (v) => (v == null ? '—' : new Intl.NumberFormat('en-US', { style: 'currency', currency: 'USD' }).format(v)),

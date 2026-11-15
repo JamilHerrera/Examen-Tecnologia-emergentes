@@ -113,7 +113,7 @@ CREATE TABLE ops.assistant_audit (
     Username     NVARCHAR(50) NOT NULL,
     Question     NVARCHAR(1000) NOT NULL,
     Intent       NVARCHAR(60) NULL,
-    Outcome      NVARCHAR(20) NOT NULL,
+    Outcome      NVARCHAR(40) NOT NULL,
     LlmModel     NVARCHAR(80) NULL,
     LatencyMs    INT NULL
 );

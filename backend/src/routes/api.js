@@ -3,12 +3,14 @@ import rateLimit from 'express-rate-limit';
 import { authenticate, login } from '../auth.js';
 import { query } from '../db.js';
 import {
-  KPI_DEFINITIONS, ValidationError, addDays, getBreakdown, getDetail, getDimensionValues,
+  KPI_DEFINITIONS, ValidationError, addDays, addMonths, getBreakdown, getDetail, getDimensionValues,
   getFreshness, getKpis, getOrder, getTrend, parseFilters,
 } from '../services/analytics.js';
 import { snapshotMetrics } from '../metrics.js';
 import { requireRole } from '../auth.js';
 import { mlRouter } from './ml.js';
+import { assistantRouter } from './assistant.js';
+import { alertsRouter } from './alerts.js';
 
 export const router = Router();
 
@@ -28,13 +30,19 @@ async function cachedFreshness() {
   return freshnessCache.value;
 }
 
+/** Ultimos 12 meses calendario que terminan en la ultima fecha con datos (p. ej. 2015-06-01 a 2016-05-31). */
+export function defaultRange(lastOrderDate) {
+  return { from: addMonths(addDays(lastOrderDate, 1), -12), to: lastOrderDate };
+}
+
 /** Filtros validados; si no se indica rango se usan los ultimos 12 meses de datos disponibles. */
 async function resolveFilters(q) {
   const filters = parseFilters(q);
   if (!filters.from || !filters.to) {
     const fresh = await cachedFreshness();
-    filters.to = filters.to ?? fresh.lastOrderDate;
-    filters.from = filters.from ?? addDays(filters.to, -364);
+    const def = defaultRange(fresh.lastOrderDate);
+    filters.to = filters.to ?? def.to;
+    filters.from = filters.from ?? (filters.to === def.to ? def.from : addDays(filters.to, -364));
     if (filters.from > filters.to) throw new ValidationError('from no puede ser mayor que to');
   }
   return filters;
@@ -57,7 +65,7 @@ router.use(authenticate);
 
 router.get('/meta', wrap(async (_req, res) => {
   const [freshness, dimensions] = await Promise.all([cachedFreshness(), getDimensionValues()]);
-  res.json({ freshness, dimensions, defaultRange: { from: addDays(freshness.lastOrderDate, -364), to: freshness.lastOrderDate } });
+  res.json({ freshness, dimensions, defaultRange: defaultRange(freshness.lastOrderDate) });
 }));
 
 router.get('/kpis/definitions', (_req, res) => res.json(KPI_DEFINITIONS));
@@ -106,3 +114,5 @@ router.get('/ops/etl-status', wrap(async (_req, res) => {
 router.get('/ops/metrics', requireRole('admin'), (_req, res) => res.json(snapshotMetrics()));
 
 router.use('/ml', mlRouter);
+router.use('/assistant', assistantRouter);
+router.use('/alerts', alertsRouter);

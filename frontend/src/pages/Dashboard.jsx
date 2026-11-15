@@ -86,7 +86,7 @@ export default function Dashboard({ meta }) {
       </Card>
 
       <p className="muted footnote">
-        Datos historicos del Data Warehouse · pedidos hasta {fmt.datetime(meta.freshness.lastOrderDate)} ·
+        Datos historicos del Data Warehouse · pedidos hasta {meta.freshness.lastOrderDate} ·
         ultima carga {fmt.datetime(meta.freshness.lastLoadedAt)}
       </p>
       {orderId && <OrderModal orderId={orderId} onClose={() => setOrderId(null)} />}
