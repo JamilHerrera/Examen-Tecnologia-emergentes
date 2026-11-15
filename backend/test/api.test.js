@@ -67,6 +67,22 @@ test('solo admin accede a metricas operativas', async () => {
   assert.equal((await get('/ops/metrics', adminToken)).status, 200);
 });
 
+test('operaciones expone los conteos de la carga ETL y acepta ejecuciones con advertencias', async () => {
+  const res = await get('/ops/etl-status');
+  assert.equal(res.status, 200);
+  const body = await res.json();
+  assert.ok(Array.isArray(body.runs));
+  assert.ok(
+    body.runs.every((run) =>
+      ['RowsRead', 'RowsInserted', 'RowsUpdated', 'RowsRejected', 'RowsDeleted', 'DurationSeconds']
+        .every((field) => field in run)),
+  );
+  assert.ok(
+    body.lastSuccessfulRun === null
+      || ['success', 'warning'].includes(body.lastSuccessfulRun.Status),
+  );
+});
+
 test('KPI de ventas netas coincide con consulta independiente al origen', async () => {
   const res = await get('/kpis?from=2016-01-01&to=2016-03-31');
   assert.equal(res.status, 200);

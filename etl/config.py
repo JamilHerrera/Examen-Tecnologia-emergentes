@@ -70,4 +70,19 @@ SOURCE_TABLES = [
     "Application.DeliveryMethods",
 ]
 
+# Source primary keys and change-tracking columns for the configured extract.
+SOURCE_TABLE_METADATA = {
+    "Sales.Orders": {"key": "OrderID", "watermark": "LastEditedWhen"},
+    "Sales.OrderLines": {"key": "OrderLineID", "watermark": "LastEditedWhen"},
+    "Sales.Invoices": {"key": "InvoiceID", "watermark": "LastEditedWhen"},
+    "Sales.InvoiceLines": {"key": "InvoiceLineID", "watermark": "LastEditedWhen"},
+    "Sales.CustomerCategories": {"key": "CustomerCategoryID", "watermark": "ValidFrom"},
+    "Sales.BuyingGroups": {"key": "BuyingGroupID", "watermark": "ValidFrom"},
+    "Warehouse.StockItems": {"key": "StockItemID", "watermark": "ValidFrom"},
+    "Warehouse.Colors": {"key": "ColorID", "watermark": "ValidFrom"},
+    "Application.People": {"key": "PersonID", "watermark": "ValidFrom"},
+    "Application.DeliveryMethods": {"key": "DeliveryMethodID", "watermark": "ValidFrom"},
+}
+ETL_OVERLAP_SECONDS = int(os.getenv("ETL_OVERLAP_SECONDS", "300"))
+
 print(f"✓ Configuration loaded: {SQL_SERVER_CONFIG['server']} | {SOURCE_DATABASE}")

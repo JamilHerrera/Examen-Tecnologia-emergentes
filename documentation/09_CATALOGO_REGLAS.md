@@ -6,17 +6,17 @@ Solo se listan reglas que **existen en el codigo** (con su archivo). Las brechas
 
 | ID | Tabla | Regla | Accion | Registro del impacto |
 |---|---|---|---|---|
-| T-01 | Sales.Orders | `OrderDate` se convierte a fecha; si no se puede convertir queda nula | Se **descartan** filas con `OrderDate` nula | Mensaje en log con la cantidad descartada |
+| T-01 | Sales.Orders | `OrderDate` se convierte a fecha; si no se puede convertir queda nula | Se **descartan** filas con `OrderDate` nula | `ops.etl_reject` y conteo por ejecucion |
 | T-02 | Sales.Orders | Columnas `*ID`, `*Amount*`, `*Price*` a numerico (`errors="coerce"`) | Valor invalido → nulo | Contado como nulo en el reporte de validacion |
 | T-03 | Sales.OrderLines | `Quantity`, `UnitPrice`, `TaxRate` a numerico | Valor invalido → nulo | Idem |
-| T-04 | Sales.OrderLines | `Quantity` y `UnitPrice` obligatorios | Se descartan filas con nulos | Log |
-| T-05 | Sales.OrderLines | `Quantity > 0` | Se descartan cantidades ≤ 0 | Log |
-| T-06 | Sales.Invoices | `InvoiceDate` obligatoria y de tipo fecha | Se descartan filas con nulo | Log |
-| T-07 | Sales.InvoiceLines | `Quantity` y `ExtendedPrice` obligatorios; `Quantity > 0` | Se descartan filas | Log |
+| T-04 | Sales.OrderLines | `Quantity` y `UnitPrice` obligatorios | Se descartan filas con nulos | `ops.etl_reject` y conteo por ejecucion |
+| T-05 | Sales.OrderLines | `Quantity > 0` | Se descartan cantidades ≤ 0 | `ops.etl_reject` y conteo por ejecucion |
+| T-06 | Sales.Invoices | `InvoiceDate` obligatoria y de tipo fecha | Se descartan filas con nulo | `ops.etl_reject` y conteo por ejecucion |
+| T-07 | Sales.InvoiceLines | `Quantity` y `ExtendedPrice` obligatorios; `Quantity > 0` | Se descartan filas | `ops.etl_reject` y conteo por ejecucion |
 | T-08 | Catalogos (`CustomerCategories`, `BuyingGroups`, `StockItems`, `Colors`, `People`, `DeliveryMethods`) | Recorte de espacios en columnas de texto | Se reemplaza el valor | — |
-| T-09 | Catalogos | Duplicados por el primer campo `*ID` | Se conserva la **primera** fila (regla de supervivencia) | Log |
+| T-09 | Catalogos | Duplicados por el primer campo `*ID` | Se conserva la **primera** fila (regla de supervivencia) | `ops.etl_reject` y conteo por ejecucion |
 
-**Resultado medido** (carga completa, 2026-11-15): 605,176 filas en `staging_raw` y 605,176 en `staging_clean`, sin filas descartadas, es decir, las reglas T-01 a T-09 no encontraron incumplimientos en los datos de muestra. Los controles se activaran ante datos sucios, pero hoy los descartes **solo quedan en el log**, no en una tabla de cuarentena (ver brechas).
+**Resultado medido historico** (carga completa anterior a la Fase A, 2026-11-15): 605,176 filas en `staging_raw` y 605,176 en `staging_clean`, sin filas descartadas. Esa ejecucion previa no valida el nuevo watermark ni la tabla de cuarentena; la primera ejecucion del pipeline actualizado debe verificarse en `ops.etl_watermark`, `ops.etl_table_run` y `ops.etl_reject`.
 
 ## 2. Auditoria de calidad (`etl/audit.py`)
 

@@ -35,13 +35,26 @@ export default function Operations({ user }) {
               <h3>Ejecuciones</h3>
               <div className="table-wrap">
                 <table>
-                  <thead><tr><th>#</th><th>Proceso</th><th>Estado</th><th>Fin</th><th>Filas</th><th>Detalle</th></tr></thead>
+                  <thead>
+                    <tr>
+                      <th>#</th><th>Proceso</th><th>Estado</th><th>Fin</th><th>Leidas</th>
+                      <th>Insertadas</th><th>Actualizadas</th><th>Rechazadas</th><th>Eliminadas</th>
+                      <th>Duracion (s)</th><th>Detalle</th>
+                    </tr>
+                  </thead>
                   <tbody>
                     {etl.data.runs.map((r) => (
                       <tr key={r.RunID}>
                         <td>{r.RunID}</td><td>{r.Process}</td>
-                        <td><span className={`badge ${r.Status === 'success' ? 'ok' : 'bad'}`}>{r.Status}</span></td>
-                        <td>{fmt.datetime(r.FinishedAt)}</td><td className="num">{fmt.int(r.RowsProcessed)}</td><td>{r.Message}</td>
+                        <td><span className={`badge ${r.Status === 'success' ? 'ok' : r.Status === 'warning' ? 'warn' : 'bad'}`}>{r.Status}</span></td>
+                        <td>{fmt.datetime(r.FinishedAt)}</td>
+                        <td className="num">{fmt.int(r.RowsRead ?? r.RowsProcessed)}</td>
+                        <td className="num">{fmt.int(r.RowsInserted)}</td>
+                        <td className="num">{fmt.int(r.RowsUpdated)}</td>
+                        <td className="num">{fmt.int(r.RowsRejected)}</td>
+                        <td className="num">{fmt.int(r.RowsDeleted)}</td>
+                        <td className="num">{r.DurationSeconds == null ? '-' : Number(r.DurationSeconds).toFixed(1)}</td>
+                        <td>{r.Message}</td>
                       </tr>
                     ))}
                   </tbody>

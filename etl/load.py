@@ -220,7 +220,17 @@ class StagingLoader:
             cursor.close()
 
 
-def load_phase(extracted: Dict[str, pd.DataFrame], cleaned: Dict[str, pd.DataFrame], connector) -> bool:
+def load_phase(
+    extracted: Dict[str, pd.DataFrame],
+    cleaned: Dict[str, pd.DataFrame],
+    connector,
+    mode="full",
+    run_id=None,
+    metadata=None,
+    rejected_rows=None,
+    profiles=None,
+    stats_out=None,
+) -> bool:
     """
     Execute FASE 3.3: LOAD
     Loads extracted and cleaned data to staging layers
@@ -229,6 +239,12 @@ def load_phase(extracted: Dict[str, pd.DataFrame], cleaned: Dict[str, pd.DataFra
         extracted: Dictionary of extracted DataFrames
         cleaned: Dictionary of cleaned DataFrames
         connector: DatabaseConnector instance
+        mode: Requested full or incremental load mode
+        run_id: Operational execution identifier
+        metadata: Per-table extraction and watermark metadata
+        rejected_rows: Rows rejected by transformation rules
+        profiles: Raw and clean profiles keyed by source table
+        stats_out: Optional dictionary populated with committed per-layer counts
     
     Returns:
         True if successful, False otherwise
@@ -239,42 +255,40 @@ def load_phase(extracted: Dict[str, pd.DataFrame], cleaned: Dict[str, pd.DataFra
     logger.info("=" * 80)
     
     start_time = time.time()
-    
-    loader = StagingLoader(connector)
-    
+
     try:
-        # Create staging schemas
-        if not loader.create_staging_schemas():
-            logger.error("❌ Falló crear schemas de staging")
+        from etl.reliable_load import load_reliably
+
+        succeeded, stats = load_reliably(
+            extracted,
+            cleaned,
+            connector,
+            mode,
+            run_id,
+            metadata or {},
+            rejected_rows or [],
+            profiles or {},
+        )
+        if not succeeded:
             return False
-        
-        # Load to staging_raw
-        if not loader.load_to_staging_raw(extracted):
-            logger.error("❌ Falló cargar a staging_raw")
-            return False
-        
-        # Load to staging_clean
-        if not loader.load_to_staging_clean(cleaned):
-            logger.error("❌ Falló cargar a staging_clean")
-            return False
-        
+
+        if stats_out is not None:
+            stats_out.update(stats)
+
         elapsed = time.time() - start_time
-        
-        # Summary
         logger.info("\n" + "-" * 80)
         logger.info(f"✅ CARGA COMPLETADA en {elapsed:.2f}s")
         logger.info(f"   ✓ Tablas cargadas a staging_raw: {len(extracted)}")
         logger.info(f"   ✓ Tablas cargadas a staging_clean: {len(cleaned)}")
-        raw_stats = [stats for stats in loader.load_stats.values() if stats["layer"] == "staging_raw"]
-        clean_stats = [stats for stats in loader.load_stats.values() if stats["layer"] == "staging_clean"]
-        raw_loaded = sum(stats["rows"] for stats in raw_stats)
-        raw_expected = sum(stats["expected_rows"] for stats in raw_stats)
-        clean_loaded = sum(stats["rows"] for stats in clean_stats)
-        clean_expected = sum(stats["expected_rows"] for stats in clean_stats)
-        logger.info(f"   ✓ Filas staging_raw cargadas: {raw_loaded:,}/{raw_expected:,}")
-        logger.info(f"   ✓ Filas staging_clean cargadas: {clean_loaded:,}/{clean_expected:,}")
+        logger.info(
+            "   ✓ Filas leidas: %s | insertadas: %s | actualizadas: %s | rechazadas: %s | eliminadas: %s",
+            sum(item.get("row_count", 0) for item in (metadata or {}).values()),
+            sum(item["inserted"] for item in stats.values()),
+            sum(item["updated"] for item in stats.values()),
+            len(rejected_rows or []),
+            sum(item["deleted"] for item in stats.values()),
+        )
         logger.info("=" * 80)
-        
         return True
         
     except Exception as e:

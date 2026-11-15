@@ -51,12 +51,41 @@ pip install -r requirements.txt
 ### Ejecutar solo el pipeline de staging
 
 ```bash
-python etl/main.py
+python etl/main.py --mode incremental
 ```
 
-El pipeline carga staging raw/clean y audita la transformacion; no sustituye la carga dimensional `dw_schema.py`, `dw_dimensions.py`, `dw_customer_scd2.py`, `dw_facts.py` y `dw_enrich.py`. Carga el historial de clientes despues de las dimensiones y antes de los hechos. Despues de aplicar `database/apply_dw_layer.py`, `dw_analytics.py` carga compras, rentabilidad por factura y movimientos/snapshot de inventario directamente desde WideWorldImporters.
+El modo incremental es el predeterminado. En la primera ejecucion, cada tabla sin watermark se carga completa; las siguientes consultan los cambios desde `ops.etl_watermark`, con una ventana de solapamiento de 300 segundos. La carga es transaccional e idempotente: raw y clean se actualizan por clave, los registros rechazados se guardan en `ops.etl_reject` y el watermark avanza solo despues de confirmar la carga.
 
-**Tiempo:** depende del hardware y de la base. La carga actual inserta filas individualmente y puede tardar bastante; revisar el log generado en `logs/etl_*.log`.
+Para reconstruir staging desde cero, usar explícitamente:
+
+```powershell
+python etl/main.py --mode full
+```
+
+La opcion `--max-retries` (predeterminada: 3) reintenta solo la carga transaccional, sin repetir la extraccion; `--retry-delay` controla la espera en segundos. La auditoria por ejecucion incluye conteos por tabla/capa en `ops.etl_table_run`, perfiles JSON en `ops.etl_profile` y un informe local en `logs/profiling/`.
+
+Antes de ejecutar el ETL, la capa `ops` debe estar aplicada con `python database/apply_dw_layer.py` despues de crear el DW. El pipeline de staging no sustituye la carga dimensional `dw_schema.py`, `dw_dimensions.py`, `dw_customer_scd2.py`, `dw_facts.py` y `dw_enrich.py`. Carga el historial de clientes despues de las dimensiones y antes de los hechos. Despues de aplicar `database/apply_dw_layer.py`, `dw_analytics.py` carga compras, rentabilidad por factura y movimientos/snapshot de inventario directamente desde WideWorldImporters.
+
+### Orquestacion diaria en Windows
+
+Desde PowerShell, en la raiz del repositorio, registrar una tarea diaria a las 2:00 AM:
+
+```powershell
+.\deployment\register-etl-task.ps1
+```
+
+La tarea usa el Python del entorno `.venv` (o `python.exe` del PATH si no existe), ejecuta modo incremental, ignora una nueva instancia si ya hay una en curso y reintenta el proceso ante fallos. Se registra con el usuario actual y requiere una sesion iniciada. Para probarla manualmente:
+
+```powershell
+Start-ScheduledTask -TaskName 'WideWorldImporters Incremental ETL'
+Get-ScheduledTaskInfo -TaskName 'WideWorldImporters Incremental ETL'
+```
+
+Para quitarla:
+
+```powershell
+Unregister-ScheduledTask -TaskName 'WideWorldImporters Incremental ETL' -Confirm:$false
+```
 
 ---
 
@@ -70,19 +99,13 @@ WideWorldImporters (Source)
 EXTRACT (etl/extract.py)
     │ pyodbc + pandas
     ▼
-Staging Raw (SQL Server)
-    │
-    ▼
 TRANSFORM (etl/transform.py)
     │ pandas + numpy
     ▼
-Staging Clean (SQL Server)
-    │
-    ▼
-LOAD (etl/load.py)
-    │ pyodbc
-    ▼
-SQL Server Tables (Raw & Clean)
+LOAD (etl/reliable_load.py; transaccion atomica)
+    ├─ staging_raw / staging_clean
+    ├─ ops.etl_watermark / etl_table_run / etl_reject / etl_profile
+    └─ logs/profiling/
     │
     ▼
 AUDIT (etl/audit.py)
@@ -137,7 +160,9 @@ etl/
 ├── config.py            # Configuración centralizada
 ├── extract.py           # Extractor (DatabaseConnector, DataExtractor)
 ├── transform.py         # Transformaciones (DataCleaner, DataValidator)
-├── load.py              # Carga por fila a staging_raw y staging_clean
+├── load.py              # Integracion del cargador transaccional
+├── reliable_load.py     # Upsert, reemplazo, auditoria y cuarentena
+├── reliability.py       # Watermarks y perfilado reproducible
 ├── audit.py             # Auditoría (Reconciliation, DataQualityMetrics)
 ├── ops_log.py           # Registro de ejecuciones en ops.etl_run_log
 └── main.py              # Orquestador del pipeline de staging
@@ -210,7 +235,7 @@ Desde la raiz del repositorio, ejecutar:
 python -m unittest discover -s etl/tests -v
 ```
 
-Estas pruebas no requieren SQL Server; verifican los conteos de filas, el fallo ante inserciones rechazadas y que la consistencia no medida no afecte el score general.
+Estas pruebas no requieren SQL Server; verifican la carga atomica, el rollback ante fallos, el manejo de deltas vacios y que la consistencia no medida no afecte el score general.
 
 ### 1. Verificar datos en SQL Server
 
@@ -225,11 +250,15 @@ FROM INFORMATION_SCHEMA.TABLES
 WHERE TABLE_SCHEMA = 'staging_raw';
 
 -- Ver ejemplos de datos limpios
-SELECT TOP 5 * FROM staging_clean.Sales_Orders;
-SELECT TOP 5 * FROM staging_clean.Sales_OrderLines;
+SELECT TOP 5 * FROM staging_clean.Sales_Orders_clean;
+SELECT TOP 5 * FROM staging_clean.Sales_OrderLines_clean;
 
--- Ejecuciones operativas, disponible despues de aplicar database/apply_dw_layer.py
+-- Ejecuciones y conteos por tabla/capa
 SELECT TOP 20 * FROM ops.etl_run_log ORDER BY StartedAt DESC;
+SELECT TOP 50 * FROM ops.etl_table_run ORDER BY TableRunID DESC;
+SELECT TOP 20 * FROM ops.etl_watermark ORDER BY SourceObject;
+SELECT TOP 20 * FROM ops.etl_reject ORDER BY RejectID DESC;
+SELECT TOP 20 * FROM ops.etl_profile ORDER BY ProfileID DESC;
 
 -- Reconciliacion del DW, disponible despues de ejecutar etl/dw_reconcile.py
 SELECT TOP 20 * FROM ops.reconciliation_result ORDER BY CheckedAt DESC;
@@ -249,7 +278,9 @@ Get-Content .\logs\etl_*.log -Tail 50
 | Parámetro | Ubicación | Default | Descripción |
 |-----------|-----------|---------|-------------|
 | `BATCH_SIZE` | config.py | 10000 | Tamaño de lote para inserciones |
-| `MAX_RETRIES` | config.py | 3 | Reintentos en caso de error |
+| `MAX_RETRIES` | config.py | 3 | Reintentos de la carga transaccional |
+| `ETL_OVERLAP_SECONDS` | .env | 300 | Ventana de solapamiento para cambios |
+| `ETL_MODE` | .env | incremental | Modo predeterminado (tambien se pasa con `--mode`) |
 | `NULL_THRESHOLD` | config.py | 0.1 (10%) | % nulls permitidos |
 | `MSSQL_SERVER` | .env | localhost,1433 | Host de SQL Server |
 | `MSSQL_SA_PASSWORD` | .env | (secreto, no versionado) | Password SA |
@@ -297,7 +328,7 @@ La lista es la definida en `etl/config.py`; no se incluyen conteos para evitar c
 - `Warehouse.StockItems`, `Warehouse.Colors`
 - `Application.People`, `Application.DeliveryMethods`
 
-La auditoria de staging compara en memoria filas extraidas y transformadas. `consistency_score` no se mide y se devuelve como `null`; el score general promedia solo completitud, unicidad y validez. Los errores de insercion se cuentan y hacen fallar la carga; se guardan hasta cinco ejemplos por tabla en el log. La tabla puede quedar parcialmente cargada, asi que no se debe continuar al DW y hay que corregir el error y repetir la carga antes de usar staging.
+La auditoria compara filas extraidas y transformadas y verifica los conteos persistidos por capa. `consistency_score` no se mide y se devuelve como `null`; el score general promedia solo completitud, unicidad y validez. La carga de todas las tablas y su metadata operativa se confirma o revierte como una transaccion. Un error impide avanzar los watermarks; se puede reintentar sin duplicar filas.
 
 ---
 

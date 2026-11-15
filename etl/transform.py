@@ -14,6 +14,24 @@ logger = logging.getLogger(__name__)
 
 class DataCleaner:
     """Handles data quality and transformations"""
+
+    def __init__(self):
+        self.rejected_rows = []
+
+    def _record_rejects(self, df, mask, table_name, rule_name, detail):
+        rejected = df.loc[mask]
+        if rejected.empty:
+            return
+        key_columns = [column for column in df.columns if column.endswith("ID")]
+        key_column = key_columns[0] if key_columns else None
+        for _, row in rejected.iterrows():
+            self.rejected_rows.append({
+                "source_table": table_name,
+                "rule_name": rule_name,
+                "business_key": None if key_column is None or pd.isna(row[key_column]) else str(row[key_column]),
+                "row_data": row.to_dict(),
+                "detail": detail,
+            })
     
     def clean_sales_orders(self, df: pd.DataFrame) -> pd.DataFrame:
         """Clean Sales.Orders table"""
@@ -27,8 +45,13 @@ class DataCleaner:
                 df[col] = pd.to_datetime(df[col], errors="coerce")
         
         # Remove rows with null OrderDate (critical field)
+        invalid_order_date = df["OrderDate"].isna()
+        self._record_rejects(
+            df, invalid_order_date, "Sales.Orders", "required_order_date",
+            "OrderDate is null or could not be parsed.",
+        )
         rows_before = len(df)
-        df = df.dropna(subset=["OrderDate"])
+        df = df.loc[~invalid_order_date]
         removed = rows_before - len(df)
         if removed > 0:
             logger.info(f"    - Removed {removed} rows with null OrderDate")
@@ -54,15 +77,25 @@ class DataCleaner:
                 df[col] = pd.to_numeric(df[col], errors="coerce")
         
         # Remove rows with null critical fields
+        invalid_values = df[["Quantity", "UnitPrice"]].isna().any(axis=1)
+        self._record_rejects(
+            df, invalid_values, "Sales.OrderLines", "required_quantity_and_price",
+            "Quantity or UnitPrice is null or could not be parsed.",
+        )
         rows_before = len(df)
-        df = df.dropna(subset=["Quantity", "UnitPrice"])
+        df = df.loc[~invalid_values]
         removed = rows_before - len(df)
         if removed > 0:
             logger.info(f"    - Removed {removed} rows with null quantities/prices")
         
-        # Remove negative quantities
+        # Remove non-positive quantities
+        invalid_quantity = df["Quantity"] <= 0
+        self._record_rejects(
+            df, invalid_quantity, "Sales.OrderLines", "positive_quantity",
+            "Quantity must be greater than zero.",
+        )
         rows_before = len(df)
-        df = df[df["Quantity"] > 0] if "Quantity" in df.columns else df
+        df = df.loc[~invalid_quantity]
         removed = rows_before - len(df)
         if removed > 0:
             logger.info(f"    - Removed {removed} rows with negative quantities")
@@ -88,8 +121,13 @@ class DataCleaner:
                 df[col] = pd.to_datetime(df[col], errors="coerce")
         
         # Remove rows with null InvoiceDate
+        invalid_invoice_date = df["InvoiceDate"].isna()
+        self._record_rejects(
+            df, invalid_invoice_date, "Sales.Invoices", "required_invoice_date",
+            "InvoiceDate is null or could not be parsed.",
+        )
         rows_before = len(df)
-        df = df.dropna(subset=["InvoiceDate"])
+        df = df.loc[~invalid_invoice_date]
         removed = rows_before - len(df)
         if removed > 0:
             logger.info(f"    - Removed {removed} rows with null InvoiceDate")
@@ -117,15 +155,25 @@ class DataCleaner:
                 df[col] = pd.to_numeric(df[col], errors="coerce")
         
         # Remove rows with null critical fields
+        invalid_values = df[["Quantity", "ExtendedPrice"]].isna().any(axis=1)
+        self._record_rejects(
+            df, invalid_values, "Sales.InvoiceLines", "required_quantity_and_extended_price",
+            "Quantity or ExtendedPrice is null or could not be parsed.",
+        )
         rows_before = len(df)
-        df = df.dropna(subset=["Quantity", "ExtendedPrice"])
+        df = df.loc[~invalid_values]
         removed = rows_before - len(df)
         if removed > 0:
             logger.info(f"    - Removed {removed} rows with null quantities/extended prices")
         
-        # Remove negative quantities
+        # Remove non-positive quantities
+        invalid_quantity = df["Quantity"] <= 0
+        self._record_rejects(
+            df, invalid_quantity, "Sales.InvoiceLines", "positive_quantity",
+            "Quantity must be greater than zero.",
+        )
         rows_before = len(df)
-        df = df[df["Quantity"] > 0] if "Quantity" in df.columns else df
+        df = df.loc[~invalid_quantity]
         removed = rows_before - len(df)
         if removed > 0:
             logger.info(f"    - Removed {removed} rows with negative quantities")
@@ -153,8 +201,13 @@ class DataCleaner:
         # Remove duplicates based on ID (if exists)
         id_cols = [col for col in df.columns if col.endswith("ID")]
         if id_cols:
+            duplicate_mask = df.duplicated(subset=[id_cols[0]], keep="first")
+            self._record_rejects(
+                df, duplicate_mask, table_name.replace("_", ".", 1), "duplicate_business_key",
+                f"Duplicate {id_cols[0]}; the first occurrence was retained.",
+            )
             rows_before = len(df)
-            df = df.drop_duplicates(subset=[id_cols[0]])
+            df = df.loc[~duplicate_mask]
             removed = rows_before - len(df)
             if removed > 0:
                 logger.info(f"    - Removed {removed} duplicate rows")
@@ -185,7 +238,7 @@ class DataCleaner:
                     cleaned[table_name] = self.clean_categorical_data(df, table_name)
             except Exception as e:
                 logger.error(f"  ✗ Error cleaning {table_name}: {str(e)}")
-                cleaned[table_name] = df
+                raise
         
         return cleaned
 
@@ -235,7 +288,7 @@ class DataValidator:
         return validation_report
 
 
-def transform_phase(extracted: Dict[str, pd.DataFrame]) -> Tuple[Dict[str, pd.DataFrame], Dict[str, Any]]:
+def transform_phase(extracted: Dict[str, pd.DataFrame]) -> Tuple[Dict[str, pd.DataFrame], Dict[str, Any], list]:
     """
     Execute FASE 3.2: TRANSFORM
     Cleans and validates extracted data
@@ -244,7 +297,7 @@ def transform_phase(extracted: Dict[str, pd.DataFrame]) -> Tuple[Dict[str, pd.Da
         extracted: Dictionary of extracted DataFrames
     
     Returns:
-        Tuple of (cleaned_data, validation_report)
+        Tuple of cleaned data, validation report, and rejected-row details.
     """
     logger.info("\n" + "=" * 80)
     logger.info("📊 FASE 3.2: TRANSFORMACIÓN")
@@ -268,7 +321,7 @@ def transform_phase(extracted: Dict[str, pd.DataFrame]) -> Tuple[Dict[str, pd.Da
     logger.info(f"   ✓ Filas totales: {sum(len(df) for df in cleaned_data.values()):,}")
     logger.info("=" * 80)
     
-    return cleaned_data, validation_report
+    return cleaned_data, validation_report, cleaner.rejected_rows
 
 
 if __name__ == "__main__":

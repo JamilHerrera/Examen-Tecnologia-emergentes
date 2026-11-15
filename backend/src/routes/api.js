@@ -115,14 +115,16 @@ router.get('/orders/:orderId', wrap(async (req, res) => {
 
 router.get('/ops/etl-status', wrap(async (_req, res) => {
   const [runs, checks, freshness] = await Promise.all([
-    query(`SELECT TOP 10 RunID, Process, Status, StartedAt, FinishedAt, RowsProcessed, Message
+    query(`SELECT TOP 10 RunID, Process, Status, StartedAt, FinishedAt, RowsProcessed,
+                  RowsRead, RowsInserted, RowsUpdated, RowsRejected, RowsDeleted,
+                  WatermarkStart, WatermarkEnd, DurationSeconds, Message
            FROM ops.etl_run_log ORDER BY RunID DESC`),
     query(`SELECT r.CheckName, r.SourceValue, r.DwValue, r.Difference, r.Passed, r.CheckedAt
            FROM ops.reconciliation_result r
            WHERE r.RunID = (SELECT MAX(RunID) FROM ops.reconciliation_result) ORDER BY r.ResultID`),
     cachedFreshness(),
   ]);
-  const lastSuccess = runs.find((r) => r.Status === 'success');
+  const lastSuccess = runs.find((r) => ['success', 'warning'].includes(r.Status));
   res.json({ freshness, lastSuccessfulRun: lastSuccess ?? null, runs, reconciliation: checks });
 }));
 

@@ -28,7 +28,7 @@ SQL Server (origen) ─► ETL Python (staging_raw/clean) ─► Data Warehouse 
 | — | Estructura y despliegue | [11](documentation/11_ESTRUCTURA_Y_DESPLIEGUE.md) |
 | — | Informe final y guia de usuario | [FINAL_REPORT.md](FINAL_REPORT.md), [GUIA_USUARIO.md](documentation/GUIA_USUARIO.md) |
 
-**Brechas conocidas frente a la guia del proyecto:** carga incremental con watermark, tabla de cuarentena, reporte de perfilado, auditoria con conteos por etapa y orquestacion programada aun no estan implementadas (ver [requisitos](documentation/00_REQUISITOS_Y_ALCANCE.md#6-brechas-conocidas-frente-a-la-guia)).
+**Fase A de confiabilidad ETL:** staging admite cargas incrementales con watermark, cuarentena, perfiles y auditoria por tabla; `deployment/register-etl-task.ps1` registra una ejecucion diaria en Windows. Los detalles de ejecucion y validacion estan en [etl/README.md](etl/README.md).
 
 ## Puesta en marcha
 

@@ -5,10 +5,12 @@ Extract data from WideWorldImporters source database into staging_raw layer
 
 import pyodbc
 import pandas as pd
-from typing import Dict, List, Optional
+from typing import Dict, List, Optional, Tuple
 import time
-from datetime import datetime
+from datetime import datetime, timedelta
 from etl.config import SQL_SERVER_CONFIG, SOURCE_DATABASE, SOURCE_TABLES, logger
+from etl.config import SOURCE_TABLE_METADATA, ETL_OVERLAP_SECONDS
+from etl.reliability import read_watermark
 
 
 class DatabaseConnector:
@@ -48,14 +50,14 @@ class DatabaseConnector:
         except Exception as e:
             logger.error(f"✗ Disconnect failed: {str(e)}")
     
-    def execute_query(self, query: str) -> Optional[pd.DataFrame]:
+    def execute_query(self, query: str, params=None) -> Optional[pd.DataFrame]:
         """Execute SELECT query and return DataFrame"""
         try:
-            df = pd.read_sql(query, self.connection)
+            df = pd.read_sql(query, self.connection, params=params)
             return df
         except Exception as e:
             logger.error(f"✗ Query execution failed: {str(e)}")
-            return None
+            raise
     
     def get_row_count(self, table: str) -> int:
         """Get row count for a table"""
@@ -65,7 +67,7 @@ class DatabaseConnector:
             return int(result['cnt'].iloc[0]) if result is not None and len(result) > 0 else 0
         except Exception as e:
             logger.error(f"✗ Row count failed for {table}: {str(e)}")
-            return 0
+            raise
 
 
 class DataExtractor:
@@ -77,7 +79,7 @@ class DataExtractor:
         self.extraction_metadata: Dict[str, Dict] = {}
         self.extraction_errors: List[Dict] = []
     
-    def extract_table(self, source_table: str, target_name: str) -> Optional[pd.DataFrame]:
+    def extract_table(self, source_table: str, target_name: str, mode="full") -> Optional[pd.DataFrame]:
         """
         Extract single table from source
         
@@ -92,12 +94,46 @@ class DataExtractor:
             start_time = time.time()
             logger.info(f"  Extracting [{source_table}]...")
             
-            # Get row count before extraction
-            source_count = self.connector.get_row_count(source_table)
-            
-            # Extract data
-            query = f"SELECT * FROM [{source_table.split('.')[0]}].[{source_table.split('.')[1]}]"
-            df = self.connector.execute_query(query)
+            schema, table = source_table.split(".")
+            source_meta = SOURCE_TABLE_METADATA[source_table]
+            cursor = self.connector.connection.cursor()
+            cursor.execute(
+                "SELECT name FROM sys.columns WHERE object_id = OBJECT_ID(?)",
+                source_table,
+            )
+            source_columns = {row[0] for row in cursor.fetchall()}
+            watermark_column = source_meta["watermark"]
+            if source_meta["key"] not in source_columns or watermark_column not in source_columns:
+                raise RuntimeError(
+                    f"{source_table} no contiene la clave {source_meta['key']} "
+                    f"o la columna de watermark {watermark_column}."
+                )
+
+            effective_mode = mode
+            previous_column = None
+            previous_watermark = None
+            overlap_seconds = ETL_OVERLAP_SECONDS
+            if mode == "incremental":
+                previous_column, previous_watermark, overlap_seconds = read_watermark(
+                    cursor, source_table
+                )
+                if previous_watermark is None:
+                    effective_mode = "full"
+                    logger.info("  Sin watermark para %s; se ejecuta carga inicial completa.", source_table)
+            watermark_start = (
+                previous_watermark - timedelta(seconds=overlap_seconds)
+                if effective_mode == "incremental"
+                else None
+            )
+
+            query = (
+                f"SELECT * FROM [{schema}].[{table}]"
+                + (f" WHERE [{watermark_column}] >= ?" if watermark_start is not None else "")
+            )
+            df = self.connector.execute_query(
+                query,
+                [watermark_start] if watermark_start is not None else None,
+            )
             
             if df is None:
                 logger.warning(f"  ⚠ Query returned None for {source_table}")
@@ -108,7 +144,7 @@ class DataExtractor:
                 })
                 return None
             
-            if len(df) == 0:
+            if len(df) == 0 and effective_mode != "incremental":
                 logger.warning(f"  ⚠ No data extracted from {source_table}")
                 self.extraction_errors.append({
                     "table": source_table,
@@ -124,10 +160,28 @@ class DataExtractor:
             # Store extracted data
             self.extracted_data[target_name] = df
             
+            watermark_end = None
+            if watermark_column in df.columns and not df.empty:
+                watermark_end = pd.to_datetime(df[watermark_column], errors="coerce").max()
+                if pd.isna(watermark_end):
+                    watermark_end = None
+                elif hasattr(watermark_end, "to_pydatetime"):
+                    watermark_end = watermark_end.to_pydatetime()
+            if previous_watermark is not None and (
+                watermark_end is None or watermark_end < previous_watermark
+            ):
+                watermark_end = previous_watermark
+
             # Store metadata
             self.extraction_metadata[target_name] = {
                 "source_table": source_table,
                 "target_name": target_name,
+                "key_column": source_meta["key"],
+                "watermark_column": watermark_column,
+                "watermark_start": watermark_start,
+                "watermark_end": watermark_end,
+                "overlap_seconds": overlap_seconds,
+                "mode": effective_mode,
                 "row_count": row_count,
                 "column_count": col_count,
                 "columns": list(df.columns),
@@ -147,7 +201,7 @@ class DataExtractor:
             })
             return None
     
-    def extract_all_sources(self) -> Dict[str, pd.DataFrame]:
+    def extract_all_sources(self, mode="full") -> Dict[str, pd.DataFrame]:
         """Extract all source tables"""
         logger.info("\n" + "=" * 80)
         logger.info("📊 INICIANDO FASE 3.1: EXTRACCIÓN")
@@ -161,7 +215,7 @@ class DataExtractor:
         for table_mapping in SOURCE_TABLES:
             source = table_mapping
             target = table_mapping.replace(".", "_")
-            self.extract_table(source, target)
+            self.extract_table(source, target, mode)
         
         elapsed = time.time() - start_time
         
@@ -179,15 +233,20 @@ class DataExtractor:
         logger.info("\n🔍 Validando extracción...")
         logger.info("-" * 80)
         
-        all_valid = True
+        all_valid = (
+            len(self.extraction_metadata) == len(SOURCE_TABLES)
+            and not self.extraction_errors
+        )
         
         for target_name in sorted(self.extraction_metadata.keys()):
             meta = self.extraction_metadata[target_name]
             df = self.extracted_data.get(target_name)
             
-            if df is None or len(df) == 0:
+            if df is None or (df.empty and meta["mode"] != "incremental"):
                 logger.warning(f"  ⚠ {meta['source_table']}: Empty or None")
                 all_valid = False
+            elif df.empty:
+                logger.info(f"  ✓ {meta['source_table']}: sin cambios desde el watermark")
             else:
                 # Check for nulls
                 null_counts = df.isnull().sum()
@@ -224,7 +283,8 @@ class DataExtractor:
         report += "\n" + "-" * 80 + "\n"
         report += f"Total Rows Extracted: {total_rows:,}\n"
         report += f"Total Extraction Time: {total_time:.2f}s\n"
-        report += f"Average Time/Table: {total_time/len(self.extraction_metadata):.2f}s\n"
+        average_time = total_time / len(self.extraction_metadata) if self.extraction_metadata else 0
+        report += f"Average Time/Table: {average_time:.2f}s\n"
         report += "=" * 80 + "\n"
         
         if self.extraction_errors:
@@ -241,34 +301,39 @@ class DataExtractor:
 # EXTRACTION ORCHESTRATION FUNCTION
 # ============================================================================
 
-def extract_phase() -> Dict[str, pd.DataFrame]:
+def extract_phase(mode="incremental") -> Tuple[Dict[str, pd.DataFrame], Dict[str, Dict]]:
     """
     Execute FASE 3.1: EXTRACT
     Orchestrates extraction of all source tables from WideWorldImporters
     
     Returns:
-        Dictionary of extracted DataFrames keyed by target table name
+        Tuple containing extracted DataFrames and per-table extraction metadata.
     """
     connector = DatabaseConnector(SQL_SERVER_CONFIG)
     
     if not connector.connect():
-        logger.error("❌ Failed to connect to database")
-        return {}
+        raise RuntimeError("No se pudo conectar a la base de datos de origen.")
     
     extractor = DataExtractor(connector)
-    extracted_data = extractor.extract_all_sources()
-    is_valid = extractor.validate_extraction()
-    
-    print(extractor.get_extraction_report())
-    
-    connector.disconnect()
+    try:
+        extracted_data = extractor.extract_all_sources(mode)
+        is_valid = extractor.validate_extraction()
+        print(extractor.get_extraction_report())
+    finally:
+        connector.disconnect()
     
     if not is_valid:
-        logger.warning("⚠ Some extraction issues detected")
+        errors = "; ".join(
+            f"{item['table']}: {item['error']}" for item in extractor.extraction_errors
+        )
+        raise RuntimeError(
+            "La extracción está incompleta o no es válida."
+            + (f" Detalles: {errors}" if errors else "")
+        )
     
     logger.info("✅ FASE 3.1 COMPLETADA - Datos listos para transformación")
     
-    return extracted_data
+    return extracted_data, extractor.extraction_metadata
 
 
 # ============================================================================

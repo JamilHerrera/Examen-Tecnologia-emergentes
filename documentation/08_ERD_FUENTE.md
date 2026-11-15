@@ -57,7 +57,7 @@ erDiagram
 ## Claves y columnas de auditoria
 
 - **Claves naturales:** `<Entidad>ID` (entero) en todas las tablas; se conservan en el DW para trazabilidad.
-- **Auditoria de la fuente:** `LastEditedBy` y `LastEditedWhen` en las tablas operativas; las tablas temporales (`Customers`, `StockItems`, etc.) tienen `ValidFrom`/`ValidTo`. Estas columnas serian la base de un watermark incremental (pendiente).
+- **Auditoria de la fuente:** `LastEditedBy` y `LastEditedWhen` en las tablas operativas; las tablas temporales (`Customers`, `StockItems`, etc.) tienen `ValidFrom`/`ValidTo`. La carga incremental configurada usa `LastEditedWhen` o `ValidFrom` como watermark por tabla.
 - **Duplicados:** las claves primarias impiden duplicados en la fuente; la limpieza de catalogos deduplica por el primer campo `*ID`.
 
-El diccionario de columnas del DW esta en [DICCIONARIO_DATOS.md](DICCIONARIO_DATOS.md). El perfilado columna a columna de la fuente aun no tiene reporte propio.
+El diccionario de columnas del DW esta en [DICCIONARIO_DATOS.md](DICCIONARIO_DATOS.md). El perfilado columna a columna por ejecucion se registra en `ops.etl_profile` y `logs/profiling/`.

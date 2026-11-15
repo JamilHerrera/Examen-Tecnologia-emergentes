@@ -48,12 +48,12 @@ class Reconciliation:
         """Query database to validate staging layer row counts"""
         try:
             schema, table = table_name.split(".")
-            staging_raw = f"{schema}_{table}"
+            staging_raw = f"{schema}_{table}_raw"
             staging_clean = f"{schema}_{table}_clean"
 
             # Count rows in staging layers
-            query_raw = f"SELECT COUNT(*) as cnt FROM staging_raw.{staging_raw}"
-            query_clean = f"SELECT COUNT(*) as cnt FROM staging_clean.{staging_clean}"
+            query_raw = f"SELECT COUNT(*) as cnt FROM [staging_raw].[{staging_raw}]"
+            query_clean = f"SELECT COUNT(*) as cnt FROM [staging_clean].[{staging_clean}]"
 
             raw_count = self.connector.execute_query(query_raw)["cnt"].values[0]
             clean_count = self.connector.execute_query(query_clean)["cnt"].values[0]
@@ -160,12 +160,26 @@ def audit_phase(extracted: Dict[str, pd.DataFrame], cleaned: Dict[str, pd.DataFr
     # Reconcile extracted vs cleaned
     reconciliation_report = reconciliation.reconcile_sources(extracted, cleaned)
 
+    staging_report = {}
+    staging_errors = []
+    for target_name in extracted:
+        source_name = target_name.replace("_", ".", 1)
+        result = reconciliation.reconcile_staging_to_database(source_name)
+        staging_report[source_name] = result
+        if "error" in result:
+            staging_errors.append({"table": source_name, "error": result["error"]})
+
     # Generate quality report
     quality_report = quality_metrics.quality_report(cleaned)
 
     logger.info(f"\n✓ Audit phase complete")
 
-    return {"reconciliation": reconciliation_report, "quality": quality_report}
+    return {
+        "reconciliation": reconciliation_report,
+        "staging": staging_report,
+        "staging_errors": staging_errors,
+        "quality": quality_report,
+    }
 
 
 if __name__ == "__main__":

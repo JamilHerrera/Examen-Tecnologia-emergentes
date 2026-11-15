@@ -46,10 +46,10 @@
 
 | Decision | Eleccion | Justificacion |
 |---|---|---|
-| Extraccion | **Batch completo** (carga inicial). La **carga incremental con watermark aun no esta implementada** | El volumen (≈ 605 mil filas en staging) permite recargar; es una brecha declarada frente a la guia |
+| Extraccion | Carga completa inicial y cargas incrementales posteriores por watermark con ventana de solapamiento | Los watermarks se guardan por tabla en `ops.etl_watermark` |
 | Staging | Dos esquemas: `staging_raw` (copia exacta) y `staging_clean` (tipos, limpieza) | Separa lo recibido de lo depurado |
 | ETL | Python + SQL (pandas, pyodbc) | Suficiente para el volumen; evita Airflow/Hop sin necesidad |
-| Orquestacion | Scripts ejecutados en orden (runbook). No hay planificador | Brecha declarada; ver runbook |
+| Orquestacion | Windows Task Scheduler con ejecucion diaria, reintentos y exclusion de instancias solapadas | Registro opcional mediante `deployment/register-etl-task.ps1` |
 | DW | Estrella en SQL Server; SCD2 en `DimCustomer`, SCD1 en el resto | Historia real disponible solo en `Sales.Customers_Archive` |
 | Actualizacion de hechos | Recarga completa idempotente de los hechos de negocio (`DELETE` + insercion dentro de una transaccion) | Evita duplicados al reejecutar |
 | Backend / frontend | Node.js (Express) / React + Recharts | Requisito del equipo; el navegador nunca toca SQL Server |
@@ -62,12 +62,12 @@
 El ETL es por lotes, por lo que no hay tiempo real. Las alertas se evaluan cada **15 minutos** (`ALERT_EVAL_INTERVAL_MIN`); las visibles en la aplicacion se actualizan por WebSocket al generarse. Los eventos de demo se marcan como **SIMULACION**.
 
 ### Fallas y reintentos
-- Una falla de insercion en staging marca la carga como `failed` con conteos; las filas insertadas antes pueden permanecer hasta repetir la carga.
+- Una falla de carga staging revierte la transaccion completa. El watermark solo avanza despues de confirmar la carga y los reintentos no duplican filas.
 - Las cargas del DW de negocio hacen `rollback` ante cualquier excepcion y se pueden repetir.
 - El correo reintenta 3 veces y registra cada intento.
 
 ## 5. Costos
 Todo el stack es de codigo abierto o gratuito para desarrollo: SQL Server Developer, Ollama (modelo local), Node.js, React, scikit-learn. El correo es opcional (SMTP propio).
 
-## 6. Brechas conocidas frente a la guia
-Carga incremental/watermark, tabla de cuarentena de registros rechazados, reporte de perfilado de datos, auditoria con conteos por etapa (`rows_read/inserted/updated/rejected`) y orquestacion programada no estan implementados. Se priorizan despues de esta documentacion.
+## 6. Cierre de brechas frente a la guia
+La Fase A implementa la carga incremental con watermark y ventana de solapamiento, cuarentena de registros rechazados, perfiles por capa, conteos de auditoria por tabla y una tarea diaria registrable en Windows Task Scheduler. La primera carga sin watermark es completa; la orquestacion se activa manualmente con el script de despliegue y requiere que SQL Server y el usuario de Windows esten disponibles.

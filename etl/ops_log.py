@@ -31,14 +31,35 @@ def start_run(process: str):
         return None
 
 
-def finish_run(run_id, status: str, rows=None, message: str = ""):
+def finish_run(
+    run_id,
+    status: str,
+    rows=None,
+    message: str = "",
+    rows_read=None,
+    rows_inserted=None,
+    rows_updated=None,
+    rows_rejected=None,
+    rows_deleted=None,
+    watermark_start=None,
+    watermark_end=None,
+    duration_seconds=None,
+):
     if run_id is None:
         return
     try:
         with _connect() as conn:
             conn.cursor().execute(
-                "UPDATE ops.etl_run_log SET Status = ?, FinishedAt = SYSUTCDATETIME(), RowsProcessed = ?, Message = ? WHERE RunID = ?",
-                status, rows, message[:1000], run_id,
+                """
+                UPDATE ops.etl_run_log
+                SET Status = ?, FinishedAt = SYSUTCDATETIME(), RowsProcessed = ?, Message = ?,
+                    RowsRead = ?, RowsInserted = ?, RowsUpdated = ?, RowsRejected = ?,
+                    RowsDeleted = ?, WatermarkStart = ?, WatermarkEnd = ?, DurationSeconds = ?
+                WHERE RunID = ?
+                """,
+                status, rows, message[:1000], rows_read, rows_inserted, rows_updated,
+                rows_rejected, rows_deleted, watermark_start, watermark_end,
+                duration_seconds, run_id,
             )
     except pyodbc.Error as exc:
         logger.warning("No se pudo cerrar la ejecucion %s: %s", run_id, exc)
