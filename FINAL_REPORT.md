@@ -21,11 +21,12 @@ La plataforma integra WideWorldImporters con un ETL en Python, un Data Warehouse
 | Suite completa del backend | 33/33 pruebas pasaron con SQL Server disponible (`npm test` desde `backend`). |
 | Compilacion React | Exitosa; Vite transformo 403 modulos. El chunk JavaScript minificado es de 664.94 kB (194.31 kB gzip), sobre el umbral de advertencia de 500 kB. |
 | Reconciliacion de datos | 10/10 comprobaciones pasaron (RunID 10002). Origen, staging limpio y `dw.FactSales` coinciden en 231,412 lineas y $177,634,276.40 en ventas netas; no hay hechos huerfanos ni geografia desconocida. |
+| Pruebas ETL | 4/4 pruebas unitarias pasaron. Integracion con SQL Server: carga correcta 2/2; rechazo inyectado 1/3 en staging raw devolvio fallo y conteos exactos. Las tablas de prueba fueron eliminadas. |
 | Migracion de auditoria | Se verifico en SQL Server `ops.assistant_audit.Outcome` como `nvarchar(40)`; se aplico el `ALTER` solo si el ancho anterior lo requeria. |
 | Entrenamiento ML | Exitoso; selecciono `rf_leaf5`. MAE de validacion: $87,715 vs $110,552 de la base; MAE de prueba: $127,721 vs $130,476; MAPE de prueba: 12.0% vs 12.1%. Modelo registrado: `sales-weekly-202611151623`. |
 | Evaluacion de deriva ML | `predict.py --evaluate` no encontro predicciones cuyo periodo objetivo ya tenga ventas reales completas. Por tanto, no hay una metrica de deriva observada; la prueba temporal de entrenamiento anterior si se evaluo. |
 | Evaluacion Ollama | 15/15 casos pasaron los checks automatizados de intencion, resultado y hechos, con corroboracion independiente para los casos configurados. **No mide exactitud semantica.** En los casos 3 y 8 el verificador descarto borradores por traduccion de nombres y direccion contradictoria, respectivamente. |
-| Sintaxis Python | `etl/main.py`, `etl/ops_log.py` y `database/generate_data_dictionary.py` compilaron con Python 3.15.2 en una comprobacion previa de esta reanudacion. |
+| Sintaxis Python | `etl/load.py`, `etl/audit.py` y sus pruebas compilaron con Python 3.15.2; `etl/main.py`, `etl/ops_log.py` y `database/generate_data_dictionary.py` compilaron en una comprobacion previa. |
 | ETL completo de staging | No se volvio a ejecutar: inserta filas individualmente y puede tardar cerca de una hora. La reconciliacion confirma igualdad de conteos de staging limpio y DW, pero no sustituye una auditoria de cada insercion. |
 
 ## Resultados historicos y limites de interpretacion
@@ -39,7 +40,7 @@ El asistente muestra los hechos consultados por separado de la interpretacion de
 - El historial real SCD tipo 2 de clientes no se carga desde `Sales.Customers_Archive`.
 - El alcance analitico implementado es ventas; compras, inventario historico y rentabilidad basada en costos no estan cubiertos.
 - Los datos de muestra terminan el 31 de mayo de 2016; el modelo semanal tiene una ventaja pequena sobre la linea base en el conjunto de prueba documentado.
-- La auditoria ETL de staging calcula la consistencia con un valor fijo (95.0), y los errores de insercion individuales se omiten con una advertencia; una corrida marcada como exitosa no garantiza por si sola que todas las filas llegaron a staging.
+- La consistencia de staging no tiene aun una regla implementada: ahora se reporta como no medida y no se incluye en el score general. Una falla de insercion deja la carga marcada como fallida y con conteos de filas; filas insertadas previamente pueden permanecer en staging hasta repetir la carga.
 - La evaluacion automatizada de GenAI no califica adecuadamente el significado de las respuestas.
 - La evaluacion de deriva en produccion requiere que existan semanas objetivo con ventas reales completas; los datos actuales terminan el 31 de mayo de 2016.
 - La compilacion del frontend advierte sobre el tamano del bundle. No impidio el build.
@@ -47,7 +48,7 @@ El asistente muestra los hechos consultados por separado de la interpretacion de
 
 ## Trabajo pendiente para el cierre del proyecto
 
-- Corregir la auditoria ETL: eliminar la consistencia fija de 95.0 y hacer que los errores de insercion por fila afecten el estado y los conteos de la corrida.
+- Reejecutar el ETL completo en una ventana controlada para validar la nueva propagacion de errores de carga sobre todas las tablas fuente.
 - Implementar/cargar el historial SCD tipo 2 desde `Sales.Customers_Archive`.
 - Fortalecer la evaluacion semantica del asistente; los checks actuales no certifican la veracidad general de sus interpretaciones.
 - Rotar y evaluar la credencial antigua presente en el historial Git antes de hacer publico el repositorio.

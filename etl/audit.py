@@ -90,7 +90,7 @@ class DataQualityMetrics:
             "completeness_score": 0,
             "uniqueness_score": 0,
             "validity_score": 0,
-            "consistency_score": 0,
+            "consistency_score": None,
             "overall_quality_score": 0,
         }
 
@@ -111,18 +111,12 @@ class DataQualityMetrics:
                 valid_rows -= (df[col] < 0).sum()
         metrics["validity_score"] = (valid_rows / len(df) * 100) if len(df) > 0 else 0
 
-        # Consistency: simplified check
-        metrics["consistency_score"] = 95.0  # Placeholder
-
-        # Overall: average of all scores
-        metrics["overall_quality_score"] = sum(
-            [
-                metrics["completeness_score"],
-                metrics["uniqueness_score"],
-                metrics["validity_score"],
-                metrics["consistency_score"],
-            ]
-        ) / 4
+        measured_scores = [
+            metrics["completeness_score"],
+            metrics["uniqueness_score"],
+            metrics["validity_score"],
+        ]
+        metrics["overall_quality_score"] = sum(measured_scores) / len(measured_scores)
 
         return metrics
 
@@ -143,7 +137,9 @@ class DataQualityMetrics:
                 f"{table_name}:"
                 f" | Completeness: {metrics['completeness_score']:.1f}%"
                 f" | Uniqueness: {metrics['uniqueness_score']:.1f}%"
-                f" | Overall: {metrics['overall_quality_score']:.1f}%"
+                f" | Validity: {metrics['validity_score']:.1f}%"
+                " | Consistency: not measured"
+                f" | Overall (3 measured metrics): {metrics['overall_quality_score']:.1f}%"
             )
 
         avg_quality = sum(overall_scores) / len(overall_scores) if overall_scores else 0

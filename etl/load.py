@@ -54,6 +54,62 @@ class StagingLoader:
             return True
         finally:
             cursor.close()
+
+    def _insert_rows(self, cursor, table_name, layer, target_table, df, start_time):
+        col_names = ', '.join([f"[{col}]" for col in df.columns])
+        rows_inserted = 0
+        failed_rows = 0
+        error_examples = []
+
+        for idx, row in df.iterrows():
+            try:
+                placeholders = ', '.join(['?' for _ in row])
+                insert_sql = f"INSERT INTO {target_table} ({col_names}) VALUES ({placeholders})"
+                row_values = tuple(None if pd.isna(value) else value for value in row)
+                cursor.execute(insert_sql, row_values)
+            except Exception as exc:
+                failed_rows += 1
+                if len(error_examples) < 5:
+                    error_examples.append(f"row {idx}: {exc}")
+                continue
+
+            rows_inserted += 1
+            if rows_inserted % 5000 == 0:
+                self.connector.connection.commit()
+
+        self.connector.connection.commit()
+        elapsed = time.time() - start_time
+        stats_key = f"{table_name}_clean" if layer == "staging_clean" else table_name
+        self.load_stats[stats_key] = {
+            "expected_rows": len(df),
+            "rows": rows_inserted,
+            "failed_rows": failed_rows,
+            "success": failed_rows == 0,
+            "target": target_table,
+            "time": elapsed,
+            "layer": layer,
+        }
+
+        if failed_rows:
+            logger.error(
+                "    ✗ %s: %s/%s filas fallidas en %s; ejemplos: %s",
+                table_name,
+                failed_rows,
+                len(df),
+                target_table,
+                "; ".join(error_examples),
+            )
+            return False
+
+        logger.info(
+            "    ✓ %s: %s/%s filas → %s (%.2fs)",
+            table_name,
+            rows_inserted,
+            len(df),
+            target_table,
+            elapsed,
+        )
+        return True
     
     def load_to_staging_raw(self, extracted: Dict[str, pd.DataFrame]) -> bool:
         """Load extracted data to staging_raw (exact copy)"""
@@ -92,41 +148,10 @@ class StagingLoader:
                     cursor.execute(create_sql)
                     self.connector.connection.commit()
                     
-                    # Prepare insert data row by row
-                    col_names = ', '.join([f"[{col}]" for col in df_copy.columns])
-                    insert_template = f"INSERT INTO {target_table} ({col_names}) VALUES (?, ?, "
-                    
-                    rows_inserted = 0
-                    for idx, row in df_copy.iterrows():
-                        try:
-                            # Create placeholders for the row
-                            placeholders = ', '.join(['?' for _ in row])
-                            insert_sql = f"INSERT INTO {target_table} ({col_names}) VALUES ({placeholders})"
-                            
-                            # Convert row to list and handle None values
-                            row_values = tuple(None if pd.isna(v) else v for v in row)
-                            
-                            cursor.execute(insert_sql, row_values)
-                            rows_inserted += 1
-                            
-                            # Commit every 5000 rows
-                            if rows_inserted % 5000 == 0:
-                                self.connector.connection.commit()
-                        except Exception as e:
-                            logger.warning(f"    ⚠ Error in row {idx}: {str(e)}")
-                            continue
-                    
-                    self.connector.connection.commit()
-                    
-                    elapsed = time.time() - start_time
-                    self.load_stats[table_name] = {
-                        "rows": rows_inserted,
-                        "target": target_table,
-                        "time": elapsed,
-                        "layer": "staging_raw"
-                    }
-                    
-                    logger.info(f"    ✓ {table_name}: {rows_inserted:,}/{len(df):,} filas → {target_table} ({elapsed:.2f}s)")
+                    if not self._insert_rows(
+                        cursor, table_name, "staging_raw", target_table, df_copy, start_time
+                    ):
+                        return False
                     
                 except Exception as e:
                     self.connector.connection.rollback()
@@ -179,40 +204,10 @@ class StagingLoader:
                     cursor.execute(create_sql)
                     self.connector.connection.commit()
                     
-                    # Prepare insert data row by row
-                    col_names = ', '.join([f"[{col}]" for col in df_copy.columns])
-                    
-                    rows_inserted = 0
-                    for idx, row in df_copy.iterrows():
-                        try:
-                            # Create placeholders for the row
-                            placeholders = ', '.join(['?' for _ in row])
-                            insert_sql = f"INSERT INTO {target_table} ({col_names}) VALUES ({placeholders})"
-                            
-                            # Convert row to list and handle None values
-                            row_values = tuple(None if pd.isna(v) else v for v in row)
-                            
-                            cursor.execute(insert_sql, row_values)
-                            rows_inserted += 1
-                            
-                            # Commit every 5000 rows
-                            if rows_inserted % 5000 == 0:
-                                self.connector.connection.commit()
-                        except Exception as e:
-                            logger.warning(f"    ⚠ Error in row {idx}: {str(e)}")
-                            continue
-                    
-                    self.connector.connection.commit()
-                    
-                    elapsed = time.time() - start_time
-                    self.load_stats[f"{table_name}_clean"] = {
-                        "rows": rows_inserted,
-                        "target": target_table,
-                        "time": elapsed,
-                        "layer": "staging_clean"
-                    }
-                    
-                    logger.info(f"    ✓ {table_name}: {rows_inserted:,}/{len(df):,} filas → {target_table} ({elapsed:.2f}s)")
+                    if not self._insert_rows(
+                        cursor, table_name, "staging_clean", target_table, df_copy, start_time
+                    ):
+                        return False
                     
                 except Exception as e:
                     self.connector.connection.rollback()
@@ -270,7 +265,14 @@ def load_phase(extracted: Dict[str, pd.DataFrame], cleaned: Dict[str, pd.DataFra
         logger.info(f"✅ CARGA COMPLETADA en {elapsed:.2f}s")
         logger.info(f"   ✓ Tablas cargadas a staging_raw: {len(extracted)}")
         logger.info(f"   ✓ Tablas cargadas a staging_clean: {len(cleaned)}")
-        logger.info(f"   ✓ Filas totales: {sum(len(df) for df in extracted.values()):,}")
+        raw_stats = [stats for stats in loader.load_stats.values() if stats["layer"] == "staging_raw"]
+        clean_stats = [stats for stats in loader.load_stats.values() if stats["layer"] == "staging_clean"]
+        raw_loaded = sum(stats["rows"] for stats in raw_stats)
+        raw_expected = sum(stats["expected_rows"] for stats in raw_stats)
+        clean_loaded = sum(stats["rows"] for stats in clean_stats)
+        clean_expected = sum(stats["expected_rows"] for stats in clean_stats)
+        logger.info(f"   ✓ Filas staging_raw cargadas: {raw_loaded:,}/{raw_expected:,}")
+        logger.info(f"   ✓ Filas staging_clean cargadas: {clean_loaded:,}/{clean_expected:,}")
         logger.info("=" * 80)
         
         return True

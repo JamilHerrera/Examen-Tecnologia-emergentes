@@ -200,6 +200,16 @@ Las cifras y marcas de tiempo de ese ejemplo son ilustrativas e historicas, no u
 
 ## 🔍 VALIDACIÓN POST-ETL
 
+### Pruebas unitarias del auditor y la carga
+
+Desde la raiz del repositorio, ejecutar:
+
+```powershell
+python -m unittest discover -s etl/tests -v
+```
+
+Estas pruebas no requieren SQL Server; verifican los conteos de filas, el fallo ante inserciones rechazadas y que la consistencia no medida no afecte el score general.
+
 ### 1. Verificar datos en SQL Server
 
 ```sql
@@ -285,7 +295,7 @@ La lista es la definida en `etl/config.py`; no se incluyen conteos para evitar c
 - `Warehouse.StockItems`, `Warehouse.Colors`
 - `Application.People`, `Application.DeliveryMethods`
 
-La auditoria de staging compara en memoria filas extraidas y transformadas. La metrica `consistency_score` de `etl/audit.py` esta fija en 95.0 y no representa una comprobacion de integridad referencial. Ademas, los errores de insercion por fila se registran en el log y se omiten; revisar los conteos/logs antes de considerar completa una carga.
+La auditoria de staging compara en memoria filas extraidas y transformadas. `consistency_score` no se mide y se devuelve como `null`; el score general promedia solo completitud, unicidad y validez. Los errores de insercion se cuentan y hacen fallar la carga; se guardan hasta cinco ejemplos por tabla en el log. La tabla puede quedar parcialmente cargada, asi que no se debe continuar al DW y hay que corregir el error y repetir la carga antes de usar staging.
 
 ---
 

@@ -207,7 +207,7 @@ loader.load_to_staging_clean()   # Carga clean
 - **Completeness:** % de celdas non-null
 - **Uniqueness:** % de filas sin duplicados
 - **Validity:** verificacion simplificada de valores negativos en columnas ID numericas
-- **Consistency:** valor fijo 95.0 en el codigo actual; no es una medicion de integridad referencial
+- **Consistency:** no medida; el codigo devuelve `null` en vez de un valor inventado
 
 ### etl/main.py
 **Orquestador principal** que:
@@ -295,7 +295,7 @@ Sales.Orders:
 | Validity | Verificacion simplificada de IDs numericos no negativos | valid_rows / total_rows * 100 | > 95% |
 | Consistency | Placeholder fijo en el codigo; no mide integridad referencial | No aplica | No aplica |
 
-**Overall Score:** Promedio de las 4 métricas
+**Overall Score:** Promedio de las tres métricas medidas (completitud, unicidad y validez). La consistencia no participa.
 
 Ejemplo:
 ```
@@ -303,8 +303,8 @@ Sales.Orders Quality:
   Completeness:  95.2%
   Uniqueness:    99.8%
   Validity:      97.1%
-  Consistency:   95.0% (placeholder, no medido)
-  OVERALL:       96.8% (ejemplo aritmetico, no resultado actual)
+  Consistency:   N/A (no medida)
+  OVERALL:       97.4% (ejemplo aritmetico de tres metricas, no resultado actual)
 ```
 
 ### 3.4.3 Logging de ejecucion
@@ -314,7 +314,7 @@ El pipeline escribe un archivo `logs/etl_*.log`. Despues de aplicar las tablas o
 SELECT TOP 20 * FROM ops.etl_run_log ORDER BY StartedAt DESC;
 ```
 
-La auditoria de staging compara DataFrames en memoria. Los errores de insercion individuales se registran como advertencias y se omiten; validar logs y conteos persistidos antes de aceptar una carga.
+La auditoria de staging compara DataFrames en memoria. Los errores de insercion se cuentan y hacen fallar la carga; el log conserva hasta cinco ejemplos por tabla. Las inserciones anteriores pueden quedar persistidas parcialmente: no ejecutar las fases del DW hasta corregir el error y repetir la carga.
 
 ---
 
