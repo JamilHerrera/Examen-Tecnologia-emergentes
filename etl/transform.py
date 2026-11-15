@@ -47,18 +47,18 @@ class DataCleaner:
         df = df.copy()
         logger.info(f"  Cleaning Sales.OrderLines: {len(df)} rows input")
         
-        # Convert numeric columns
-        numeric_cols = ["Quantity", "UnitPrice", "LineTotal"]
+        # Convert numeric columns (OrderLines has Quantity, UnitPrice, TaxRate - no LineTotal)
+        numeric_cols = ["Quantity", "UnitPrice", "TaxRate"]
         for col in numeric_cols:
             if col in df.columns:
                 df[col] = pd.to_numeric(df[col], errors="coerce")
         
         # Remove rows with null critical fields
         rows_before = len(df)
-        df = df.dropna(subset=["Quantity", "LineTotal"])
+        df = df.dropna(subset=["Quantity", "UnitPrice"])
         removed = rows_before - len(df)
         if removed > 0:
-            logger.info(f"    - Removed {removed} rows with null quantities/totals")
+            logger.info(f"    - Removed {removed} rows with null quantities/prices")
         
         # Remove negative quantities
         rows_before = len(df)
@@ -70,6 +70,8 @@ class DataCleaner:
         # Convert dates
         if "LastEditedWhen" in df.columns:
             df["LastEditedWhen"] = pd.to_datetime(df["LastEditedWhen"], errors="coerce")
+        if "PickingCompletedWhen" in df.columns:
+            df["PickingCompletedWhen"] = pd.to_datetime(df["PickingCompletedWhen"], errors="coerce")
         
         logger.info(f"  ✓ Cleaned Sales.OrderLines: {len(df)} rows output")
         return df
@@ -108,18 +110,18 @@ class DataCleaner:
         df = df.copy()
         logger.info(f"  Cleaning Sales.InvoiceLines: {len(df)} rows input")
         
-        # Convert numeric columns
-        numeric_cols = ["Quantity", "UnitPrice", "LineTotal"]
+        # Convert numeric columns (InvoiceLines has Quantity, UnitPrice, TaxRate, TaxAmount, LineProfit, ExtendedPrice - no LineTotal)
+        numeric_cols = ["Quantity", "UnitPrice", "TaxRate", "TaxAmount", "LineProfit", "ExtendedPrice"]
         for col in numeric_cols:
             if col in df.columns:
                 df[col] = pd.to_numeric(df[col], errors="coerce")
         
         # Remove rows with null critical fields
         rows_before = len(df)
-        df = df.dropna(subset=["Quantity", "LineTotal"])
+        df = df.dropna(subset=["Quantity", "ExtendedPrice"])
         removed = rows_before - len(df)
         if removed > 0:
-            logger.info(f"    - Removed {removed} rows with null quantities/totals")
+            logger.info(f"    - Removed {removed} rows with null quantities/extended prices")
         
         # Remove negative quantities
         rows_before = len(df)

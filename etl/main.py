@@ -59,7 +59,7 @@ def run_etl_pipeline():
         
         if not load_success:
             logger.error("❌ Carga falló")
-            connector.close()
+            connector.disconnect()
             return False
         
         logger.info(f"✅ CARGA COMPLETADA en {load_duration:.1f}s")
@@ -72,7 +72,7 @@ def run_etl_pipeline():
         logger.info(f"✅ AUDITORÍA COMPLETADA en {audit_duration:.1f}s")
         
         # Close connection
-        connector.close()
+        connector.disconnect()
         
         # Summary
         total_duration = time.time() - start_time

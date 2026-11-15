@@ -1,206 +1,285 @@
 """
 ETL Load Module
-Loads cleaned data into staging layers and dimensional warehouse
+Loads cleaned data into staging layers
+Phase 3.3 Implementation
 """
-import pyodbc
+
 import pandas as pd
-from typing import Dict, Any, List
+from typing import Dict
+import time
 import logging
-from etl.config import SQL_SERVER_CONFIG, STAGING_RAW_SCHEMA, STAGING_CLEAN_SCHEMA
+import tempfile
+import os
+from pathlib import Path
 
 logger = logging.getLogger(__name__)
 
 
-class StaginLoader:
+class StagingLoader:
     """Handles loading data to staging layers"""
-
+    
     def __init__(self, connector):
         self.connector = connector
-
+        self.load_stats = {}
+    
     def create_staging_schemas(self) -> bool:
         """Create staging schemas if they don't exist"""
-        schemas = [STAGING_RAW_SCHEMA, STAGING_CLEAN_SCHEMA]
-        for schema in schemas:
-            sql = f"IF NOT EXISTS (SELECT * FROM sys.schemas WHERE name = '{schema}') CREATE SCHEMA {schema}"
-            if self.connector.execute_script(sql):
-                logger.info(f"✓ Schema {schema} ready")
-            else:
-                logger.error(f"✗ Failed to create schema {schema}")
-                return False
-        return True
-
+        logger.info("  Creando schemas de staging...")
+        
+        schemas = ["staging_raw", "staging_clean"]
+        cursor = self.connector.connection.cursor()
+        
+        try:
+            for schema in schemas:
+                try:
+                    # Check if schema exists
+                    check_sql = f"SELECT name FROM sys.schemas WHERE name = '{schema}'"
+                    cursor.execute(check_sql)
+                    result = cursor.fetchone()
+                    
+                    if not result:
+                        # Schema doesn't exist, create it
+                        create_sql = f"CREATE SCHEMA [{schema}]"
+                        cursor.execute(create_sql)
+                        self.connector.connection.commit()
+                        logger.info(f"    ✓ Schema '{schema}' creado")
+                    else:
+                        logger.info(f"    ✓ Schema '{schema}' ya existe")
+                        
+                except Exception as e:
+                    logger.error(f"    ✗ Error creando schema {schema}: {str(e)}")
+                    self.connector.connection.rollback()
+                    return False
+            
+            return True
+        finally:
+            cursor.close()
+    
     def load_to_staging_raw(self, extracted: Dict[str, pd.DataFrame]) -> bool:
         """Load extracted data to staging_raw (exact copy)"""
-        logger.info(f"\n=== LOADING TO STAGING RAW ===")
-
+        logger.info("\n  Cargando datos a staging_raw...")
+        
         cursor = self.connector.connection.cursor()
-        for table_name, df in extracted.items():
-            try:
-                # Create table in staging_raw
-                schema, table = table_name.split(".")
-                staging_table = f"{STAGING_RAW_SCHEMA}.{schema}_{table}"
-
-                # Drop if exists
-                drop_sql = f"DROP TABLE IF EXISTS {staging_table}"
-                cursor.execute(drop_sql)
-
-                # Create table from DataFrame
-                # Build CREATE TABLE statement
-                create_sql = self._generate_create_table_sql(staging_table, df)
-                cursor.execute(create_sql)
-
-                # Insert data
-                insert_sql = self._generate_insert_sql(staging_table, df)
-                cursor.execute(insert_sql, [tuple(row) for row in df.itertuples(index=False)])
-
-                self.connector.connection.commit()
-                logger.info(f"✓ Loaded {len(df)} rows to {staging_table}")
-
-            except Exception as e:
-                self.connector.connection.rollback()
-                logger.error(f"✗ Error loading {table_name}: {e}")
-                return False
-            finally:
-                cursor.close()
-
-        return True
-
+        
+        try:
+            for table_name, df in extracted.items():
+                try:
+                    start_time = time.time()
+                    
+                    # Clean column names
+                    df_copy = df.copy()
+                    df_copy.columns = [col.replace(' ', '_').replace('.', '_') for col in df_copy.columns]
+                    
+                    # Add LoadedAt timestamp
+                    df_copy['LoadedAt'] = pd.Timestamp.now()
+                    
+                    # Target table name
+                    target_table = f"[staging_raw].[{table_name}_raw]"
+                    
+                    # Drop if exists
+                    drop_sql = f"DROP TABLE IF EXISTS {target_table}"
+                    cursor.execute(drop_sql)
+                    self.connector.connection.commit()
+                    
+                    # Generate CREATE TABLE statement
+                    columns_sql = []
+                    for col in df_copy.columns:
+                        col_name = f"[{col}]"
+                        col_type = "NVARCHAR(MAX)"
+                        columns_sql.append(f"{col_name} {col_type} NULL")
+                    
+                    create_sql = f"CREATE TABLE {target_table} ({', '.join(columns_sql)})"
+                    cursor.execute(create_sql)
+                    self.connector.connection.commit()
+                    
+                    # Prepare insert data row by row
+                    col_names = ', '.join([f"[{col}]" for col in df_copy.columns])
+                    insert_template = f"INSERT INTO {target_table} ({col_names}) VALUES (?, ?, "
+                    
+                    rows_inserted = 0
+                    for idx, row in df_copy.iterrows():
+                        try:
+                            # Create placeholders for the row
+                            placeholders = ', '.join(['?' for _ in row])
+                            insert_sql = f"INSERT INTO {target_table} ({col_names}) VALUES ({placeholders})"
+                            
+                            # Convert row to list and handle None values
+                            row_values = tuple(None if pd.isna(v) else v for v in row)
+                            
+                            cursor.execute(insert_sql, row_values)
+                            rows_inserted += 1
+                            
+                            # Commit every 5000 rows
+                            if rows_inserted % 5000 == 0:
+                                self.connector.connection.commit()
+                        except Exception as e:
+                            logger.warning(f"    ⚠ Error in row {idx}: {str(e)}")
+                            continue
+                    
+                    self.connector.connection.commit()
+                    
+                    elapsed = time.time() - start_time
+                    self.load_stats[table_name] = {
+                        "rows": rows_inserted,
+                        "target": target_table,
+                        "time": elapsed,
+                        "layer": "staging_raw"
+                    }
+                    
+                    logger.info(f"    ✓ {table_name}: {rows_inserted:,}/{len(df):,} filas → {target_table} ({elapsed:.2f}s)")
+                    
+                except Exception as e:
+                    self.connector.connection.rollback()
+                    logger.error(f"    ✗ Error loading {table_name} to staging_raw: {str(e)}")
+                    return False
+            
+            return True
+            
+        finally:
+            cursor.close()
+    
     def load_to_staging_clean(self, cleaned: Dict[str, pd.DataFrame]) -> bool:
         """Load cleaned data to staging_clean"""
-        logger.info(f"\n=== LOADING TO STAGING CLEAN ===")
-
+        logger.info("\n  Cargando datos a staging_clean...")
+        
         cursor = self.connector.connection.cursor()
-        for table_name, df in cleaned.items():
-            try:
-                schema, table = table_name.split(".")
-                staging_table = f"{STAGING_CLEAN_SCHEMA}.{schema}_{table}"
-
-                # Drop if exists
-                drop_sql = f"DROP TABLE IF EXISTS {staging_table}"
-                cursor.execute(drop_sql)
-
-                # Create table from DataFrame
-                create_sql = self._generate_create_table_sql(staging_table, df)
-                cursor.execute(create_sql)
-
-                # Insert data
-                insert_sql = self._generate_insert_sql(staging_table, df)
-                cursor.execute(insert_sql, [tuple(row) for row in df.itertuples(index=False)])
-
-                self.connector.connection.commit()
-                logger.info(f"✓ Loaded {len(df)} rows to {staging_table}")
-
-            except Exception as e:
-                self.connector.connection.rollback()
-                logger.error(f"✗ Error loading {table_name}: {e}")
-                return False
-            finally:
-                cursor.close()
-
-        return True
-
-    @staticmethod
-    def _generate_create_table_sql(table_name: str, df: pd.DataFrame) -> str:
-        """Generate CREATE TABLE statement from DataFrame"""
-        columns = []
-        for col, dtype in zip(df.columns, df.dtypes):
-            if dtype == "object":
-                sql_type = "VARCHAR(MAX)"
-            elif dtype == "int64":
-                sql_type = "BIGINT"
-            elif dtype == "float64":
-                sql_type = "FLOAT"
-            elif dtype == "bool":
-                sql_type = "BIT"
-            elif "datetime" in str(dtype):
-                sql_type = "DATETIME2"
-            else:
-                sql_type = "VARCHAR(MAX)"
-
-            columns.append(f"[{col}] {sql_type}")
-
-        create_sql = f"CREATE TABLE {table_name} ({', '.join(columns)})"
-        return create_sql
-
-    @staticmethod
-    def _generate_insert_sql(table_name: str, df: pd.DataFrame) -> str:
-        """Generate INSERT statement"""
-        columns = [f"[{col}]" for col in df.columns]
-        placeholders = ", ".join(["?" for _ in df.columns])
-        insert_sql = f"INSERT INTO {table_name} ({', '.join(columns)}) VALUES ({placeholders})"
-        return insert_sql
-
-
-class AuditLogger:
-    """Logs ETL audit trail"""
-
-    def __init__(self, connector):
-        self.connector = connector
-
-    def create_audit_table(self) -> bool:
-        """Create ETL audit log table"""
-        sql = """
-        IF NOT EXISTS (SELECT * FROM sys.tables WHERE name = 'etl_audit_log')
-        CREATE TABLE [dbo].[etl_audit_log] (
-            [AuditID] BIGINT PRIMARY KEY IDENTITY(1,1),
-            [ETLDate] DATETIME2 DEFAULT GETDATE(),
-            [Phase] VARCHAR(100),
-            [TableName] VARCHAR(200),
-            [RowCount] BIGINT,
-            [Status] VARCHAR(50),
-            [ErrorMessage] VARCHAR(MAX),
-            [Duration_Seconds] INT
-        )
-        """
-        return self.connector.execute_script(sql)
-
-    def log_load(self, phase: str, table_name: str, row_count: int, status: str, duration: int, error: str = None):
-        """Log ETL operation"""
-        cursor = self.connector.connection.cursor()
+        
         try:
-            sql = """
-            INSERT INTO [dbo].[etl_audit_log] 
-            ([Phase], [TableName], [RowCount], [Status], [ErrorMessage], [Duration_Seconds])
-            VALUES (?, ?, ?, ?, ?, ?)
-            """
-            cursor.execute(sql, (phase, table_name, row_count, status, error, duration))
-            self.connector.connection.commit()
-        except Exception as e:
-            logger.error(f"Failed to log audit: {e}")
+            for table_name, df in cleaned.items():
+                try:
+                    start_time = time.time()
+                    
+                    # Clean column names
+                    df_copy = df.copy()
+                    df_copy.columns = [col.replace(' ', '_').replace('.', '_') for col in df_copy.columns]
+                    
+                    # Add metadata columns
+                    df_copy['QualityFlag'] = 'VALID'
+                    df_copy['LoadedAt'] = pd.Timestamp.now()
+                    
+                    # Target table name
+                    target_table = f"[staging_clean].[{table_name}_clean]"
+                    
+                    # Drop if exists
+                    drop_sql = f"DROP TABLE IF EXISTS {target_table}"
+                    cursor.execute(drop_sql)
+                    self.connector.connection.commit()
+                    
+                    # Generate CREATE TABLE statement
+                    columns_sql = []
+                    for col in df_copy.columns:
+                        col_name = f"[{col}]"
+                        if col == 'QualityFlag':
+                            col_type = "VARCHAR(50)"
+                        else:
+                            col_type = "NVARCHAR(MAX)"
+                        columns_sql.append(f"{col_name} {col_type} NULL")
+                    
+                    create_sql = f"CREATE TABLE {target_table} ({', '.join(columns_sql)})"
+                    cursor.execute(create_sql)
+                    self.connector.connection.commit()
+                    
+                    # Prepare insert data row by row
+                    col_names = ', '.join([f"[{col}]" for col in df_copy.columns])
+                    
+                    rows_inserted = 0
+                    for idx, row in df_copy.iterrows():
+                        try:
+                            # Create placeholders for the row
+                            placeholders = ', '.join(['?' for _ in row])
+                            insert_sql = f"INSERT INTO {target_table} ({col_names}) VALUES ({placeholders})"
+                            
+                            # Convert row to list and handle None values
+                            row_values = tuple(None if pd.isna(v) else v for v in row)
+                            
+                            cursor.execute(insert_sql, row_values)
+                            rows_inserted += 1
+                            
+                            # Commit every 5000 rows
+                            if rows_inserted % 5000 == 0:
+                                self.connector.connection.commit()
+                        except Exception as e:
+                            logger.warning(f"    ⚠ Error in row {idx}: {str(e)}")
+                            continue
+                    
+                    self.connector.connection.commit()
+                    
+                    elapsed = time.time() - start_time
+                    self.load_stats[f"{table_name}_clean"] = {
+                        "rows": rows_inserted,
+                        "target": target_table,
+                        "time": elapsed,
+                        "layer": "staging_clean"
+                    }
+                    
+                    logger.info(f"    ✓ {table_name}: {rows_inserted:,}/{len(df):,} filas → {target_table} ({elapsed:.2f}s)")
+                    
+                except Exception as e:
+                    self.connector.connection.rollback()
+                    logger.error(f"    ✗ Error loading {table_name} to staging_clean: {str(e)}")
+                    return False
+            
+            return True
+            
         finally:
             cursor.close()
 
 
 def load_phase(extracted: Dict[str, pd.DataFrame], cleaned: Dict[str, pd.DataFrame], connector) -> bool:
-    """Main load phase"""
-    logger.info("\n" + "=" * 60)
-    logger.info("PHASE 3.3: LOAD - Writing to Staging Layers")
-    logger.info("=" * 60)
-
-    loader = StaginLoader(connector)
-    audit = AuditLogger(connector)
-
-    # Create schemas
-    if not loader.create_staging_schemas():
-        logger.error("Failed to create staging schemas")
+    """
+    Execute FASE 3.3: LOAD
+    Loads extracted and cleaned data to staging layers
+    
+    Args:
+        extracted: Dictionary of extracted DataFrames
+        cleaned: Dictionary of cleaned DataFrames
+        connector: DatabaseConnector instance
+    
+    Returns:
+        True if successful, False otherwise
+    """
+    
+    logger.info("\n" + "=" * 80)
+    logger.info("📊 FASE 3.3: CARGA A STAGING")
+    logger.info("=" * 80)
+    
+    start_time = time.time()
+    
+    loader = StagingLoader(connector)
+    
+    try:
+        # Create staging schemas
+        if not loader.create_staging_schemas():
+            logger.error("❌ Falló crear schemas de staging")
+            return False
+        
+        # Load to staging_raw
+        if not loader.load_to_staging_raw(extracted):
+            logger.error("❌ Falló cargar a staging_raw")
+            return False
+        
+        # Load to staging_clean
+        if not loader.load_to_staging_clean(cleaned):
+            logger.error("❌ Falló cargar a staging_clean")
+            return False
+        
+        elapsed = time.time() - start_time
+        
+        # Summary
+        logger.info("\n" + "-" * 80)
+        logger.info(f"✅ CARGA COMPLETADA en {elapsed:.2f}s")
+        logger.info(f"   ✓ Tablas cargadas a staging_raw: {len(extracted)}")
+        logger.info(f"   ✓ Tablas cargadas a staging_clean: {len(cleaned)}")
+        logger.info(f"   ✓ Filas totales: {sum(len(df) for df in extracted.values()):,}")
+        logger.info("=" * 80)
+        
+        return True
+        
+    except Exception as e:
+        logger.error(f"❌ Error en Fase 3.3: {str(e)}", exc_info=True)
         return False
-
-    # Create audit table
-    audit.create_audit_table()
-
-    # Load to staging_raw
-    if not loader.load_to_staging_raw(extracted):
-        logger.error("Failed to load to staging_raw")
-        return False
-
-    # Load to staging_clean
-    if not loader.load_to_staging_clean(cleaned):
-        logger.error("Failed to load to staging_clean")
-        return False
-
-    logger.info(f"\n✓ Load phase complete")
-    return True
 
 
 if __name__ == "__main__":
     print("Load module loaded. Use in conjunction with extract.py and transform.py")
+
