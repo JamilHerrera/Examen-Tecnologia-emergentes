@@ -31,7 +31,7 @@ def run_etl_pipeline():
         # PHASE 1: EXTRACT
         logger.info("\n📊 INICIANDO FASE 1: EXTRACCIÓN")
         start_extract = time.time()
-        extracted_data = extract_phase(SQL_SERVER_CONFIG)
+        extracted_data = extract_phase()
         extract_duration = time.time() - start_extract
         logger.info(f"✅ EXTRACCIÓN COMPLETADA en {extract_duration:.1f}s")
         
