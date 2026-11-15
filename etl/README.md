@@ -10,66 +10,53 @@ Pipeline ETL completo para extraer, transformar, cargar y auditar datos desde **
 3. **Load:** Persistencia en Staging Raw y Clean
 4. **Audit:** Reconciliación y cálculo de métricas de calidad
 
+> Para la instalacion completa del producto (restaurar el origen, cargar el DW, aplicar BI/ops y arrancar la app), seguir primero el [runbook](../documentation/07_SEGURIDAD_Y_OPERACION.md). Las salidas y conteos de ejemplo en las secciones historicas de esta guia no son resultados de una ejecucion actual.
+
 ---
 
-## 🚀 INICIO RÁPIDO
+## Inicio inicial
 
-### 1. Descargar WideWorldImporters
+### 1. Preparar WideWorldImporters
 
-#### Opción A: Backup .bak (RECOMENDADO)
-```bash
-# Descargar desde: 
-# https://github.com/microsoft/sql-server-samples/releases/tag/wide-world-importers-v1.0
+Descargar el backup oficial `WideWorldImporters-Full.bak` desde el release de
+[WideWorldImporters](https://github.com/microsoft/sql-server-samples/releases/tag/wide-world-importers-v1.0)
+y guardarlo en `database/backups/`. El archivo no se versiona.
 
-# Guardar en:
-C:\...\database\backups\WideWorldImporters-Full.bak
+### 2. Iniciar SQL Server y Ollama
+
+Desde la raiz del repositorio, completar `.env` con base en `.env.example` y ejecutar:
+
+```powershell
+docker compose -f docker-compose-simple.yml up -d
 ```
 
-#### Opción B: Crear desde cero
-```sql
--- En SQL Server Management Studio (localhost,1433)
--- Usuario: sa | Password: el valor de MSSQL_SA_PASSWORD en tu .env
+El Compose actual inicia `sql-server-2022` y `ollama`. Para restaurar el backup si la base no existe, ejecutar los pasos SQL descritos en el [runbook de instalacion](../documentation/07_SEGURIDAD_Y_OPERACION.md). No restaurar con `WITH REPLACE` sobre una base existente.
 
--- Restaurar desde backup
-RESTORE DATABASE [WideWorldImporters] 
-FROM DISK = '/var/opt/mssql/backup/WideWorldImporters-Full.bak'
-WITH MOVE 'WWI_Primary' TO '/var/opt/mssql/data/WideWorldImporters.mdf',
-     MOVE 'WWI_UserData' TO '/var/opt/mssql/data/WideWorldImporters_userdata.ndf',
-     MOVE 'WWI_Log' TO '/var/opt/mssql/data/WideWorldImporters.ldf',
-     REPLACE;
+### 3. Ejecutar ETL y crear el Data Warehouse
+
+La configuracion Python y el orden de carga inicial (ETL, dimensiones, hechos, capa BI/operativa, reconciliacion y modelo ML) estan en el [runbook de instalacion](../documentation/07_SEGURIDAD_Y_OPERACION.md). Este documento conserva los detalles tecnicos de las fases de staging.
+
+Para validar que SQL Server este disponible:
+
+```powershell
+docker compose -f docker-compose-simple.yml ps
 ```
 
-### 2. Levantar Docker Compose
-
-```bash
-cd deployment/
-docker-compose up -d
-```
-
-**Servicios que se inician:**
-- `mssql-server` (SQL Server 2022) en puerto 1433
-- `ollama` (LLM local) en puerto 11434
-- Otros servicios backend/frontend
-
-**Verificar que SQL Server esté listo:**
-```bash
-docker-compose logs mssql-server
-# Buscar: "SQL Server is now ready for client connections"
-```
-
-### 3. Instalar dependencias Python
+### Dependencias Python
 
 ```bash
 pip install -r requirements.txt
 ```
 
-### 4. Ejecutar ETL Pipeline
+### Ejecutar solo el pipeline de staging
 
 ```bash
 python etl/main.py
 ```
 
-**Tiempo esperado:** ~2-3 minutos (360K filas)
+El pipeline carga staging raw/clean y audita la transformacion; no sustituye la carga dimensional `dw_schema.py`, `dw_dimensions.py`, `dw_facts.py` y `dw_enrich.py`.
+
+**Tiempo:** depende del hardware y de la base. La carga actual inserta filas individualmente y puede tardar bastante; revisar el log generado en `logs/etl_*.log`.
 
 ---
 
@@ -120,7 +107,7 @@ Archivo central de configuración:
 ```python
 SQL_SERVER_CONFIG = {
     "server": "localhost,1433",
-    "database": "master",
+    "database": "WideWorldImporters",
     "user": "sa",
     "password": os.environ["MSSQL_SA_PASSWORD"],  # desde .env
 }
@@ -135,7 +122,7 @@ STAGING_CLEAN_SCHEMA = "staging_clean"
 MSSQL_SERVER=localhost,1433
 MSSQL_SA_USER=sa
 MSSQL_SA_PASSWORD=<tu-password-sa>
-MSSQL_DATABASE=master
+MSSQL_DATABASE=WideWorldImporters
 ```
 
 ---
@@ -148,14 +135,17 @@ etl/
 ├── config.py            # Configuración centralizada
 ├── extract.py           # Extractor (DatabaseConnector, DataExtractor)
 ├── transform.py         # Transformaciones (DataCleaner, DataValidator)
-├── load.py              # Carga (StagingLoader, AuditLogger)
+├── load.py              # Carga por fila a staging_raw y staging_clean
 ├── audit.py             # Auditoría (Reconciliation, DataQualityMetrics)
-└── main.py              # Orquestador principal
+├── ops_log.py           # Registro de ejecuciones en ops.etl_run_log
+└── main.py              # Orquestador del pipeline de staging
 ```
+
+La carga dimensional y reconciliacion del DW se implementan en los modulos `etl/dw_*.py`, ejecutados por separado (ver [runbook](../documentation/07_SEGURIDAD_Y_OPERACION.md)).
 
 ---
 
-## 📈 EJEMPLO DE EJECUCIÓN
+## Ejemplo historico de ejecucion
 
 ```bash
 $ python etl/main.py
@@ -204,6 +194,8 @@ TOTAL:          111.1s
 ======================================================================
 ```
 
+Las cifras y marcas de tiempo de ese ejemplo son ilustrativas e historicas, no una medicion reproducible. Consultar el log local para el resultado de cada ejecucion.
+
 ---
 
 ## 🔍 VALIDACIÓN POST-ETL
@@ -224,15 +216,18 @@ WHERE TABLE_SCHEMA = 'staging_raw';
 SELECT TOP 5 * FROM staging_clean.Sales_Orders;
 SELECT TOP 5 * FROM staging_clean.Sales_OrderLines;
 
--- Revisar auditoría
-SELECT * FROM dbo.etl_audit_log ORDER BY ETLDate DESC;
+-- Ejecuciones operativas, disponible despues de aplicar database/apply_dw_layer.py
+SELECT TOP 20 * FROM ops.etl_run_log ORDER BY StartedAt DESC;
+
+-- Reconciliacion del DW, disponible despues de ejecutar etl/dw_reconcile.py
+SELECT TOP 20 * FROM ops.reconciliation_result ORDER BY CheckedAt DESC;
 ```
 
 ### 2. Verificar logs
 
 ```bash
-# Logs están en: ./logs/etl_YYYYMMDD_HHMMSS.log
-cat logs/etl_*.log | tail -50
+# En PowerShell, mostrar las ultimas 50 lineas:
+Get-Content .\logs\etl_*.log -Tail 50
 ```
 
 ---
@@ -256,14 +251,14 @@ cat logs/etl_*.log | tail -50
 **Causa:** SQL Server no está disponible  
 **Solución:**
 ```bash
-# Verificar que Docker está corriendo
-docker-compose ps
+# Verificar que Docker Desktop y los servicios estan activos
+docker compose -f docker-compose-simple.yml ps
 
-# Ver logs de SQL Server
-docker-compose logs mssql-server
+# Ver logs del servicio SQL Server
+docker compose -f docker-compose-simple.yml logs mssql
 
-# Reiniciar servicio
-docker-compose restart mssql-server
+# Reiniciar solo SQL Server
+docker compose -f docker-compose-simple.yml restart mssql
 ```
 
 ### Error: "No module named 'pyodbc'"
@@ -277,33 +272,20 @@ pip install -r requirements.txt
 ### Error: "Database 'WideWorldImporters' not found"
 
 **Causa:** BD no está restaurada  
-**Solución:**
-```sql
--- Ver BDs disponibles
-SELECT name FROM sys.databases;
-
--- Si no existe WideWorldImporters, restaurar el backup:
-RESTORE DATABASE [WideWorldImporters] 
-FROM DISK = '/var/opt/mssql/backup/WideWorldImporters-Full.bak'
-WITH REPLACE;
-```
+**Solucion:** seguir el paso de restauracion condicional del [runbook](../documentation/07_SEGURIDAD_Y_OPERACION.md). No usar `WITH REPLACE` sobre una base existente.
 
 ---
 
-## 📊 TABLAS PROCESADAS
+## Tablas fuente configuradas
 
-| # | Tabla | Filas | Transformaciones |
-|---|-------|-------|------------------|
-| 1 | Sales.Orders | 73K | Convert dates, validate FK |
-| 2 | Sales.OrderLines | 231K | Remove negatives, validate amounts |
-| 3 | Sales.Customers | 663 | Deduplicate, SCD Type 2 |
-| 4 | Sales.CustomerCategories | 3 | Minimal cleaning |
-| 5 | Warehouse.Products | 227 | Deduplicate, validate prices |
-| 6 | Warehouse.ProductCategories | 4 | Minimal cleaning |
-| 7 | Application.People | 305 | Clean names, validate emails |
-| 8 | Application.Cities | 3.2K | Deduplicate, standardize |
-| 9 | Application.StateProvinces | 54 | Minimal cleaning |
-| 10 | Application.Countries | 190 | Validate ISO codes |
+La lista es la definida en `etl/config.py`; no se incluyen conteos para evitar confundir estimaciones con resultados medidos.
+
+- `Sales.Orders`, `Sales.OrderLines`, `Sales.Invoices`, `Sales.InvoiceLines`
+- `Sales.CustomerCategories`, `Sales.BuyingGroups`
+- `Warehouse.StockItems`, `Warehouse.Colors`
+- `Application.People`, `Application.DeliveryMethods`
+
+La auditoria de staging compara en memoria filas extraidas y transformadas. La metrica `consistency_score` de `etl/audit.py` esta fija en 95.0 y no representa una comprobacion de integridad referencial. Ademas, los errores de insercion por fila se registran en el log y se omiten; revisar los conteos/logs antes de considerar completa una carga.
 
 ---
 

@@ -22,15 +22,72 @@ Limitaciones: HTTPS no esta configurado (demo local; poner un proxy TLS en produ
 
 ## Runbook
 
-### Arranque completo (desarrollo)
+### Instalacion inicial (desarrollo)
+
+1. Copiar `.env.example` a `.env` y completar los valores localmente. Descargar `WideWorldImporters-Full.bak` desde el release oficial de WideWorldImporters y guardarlo en `database/backups/`.
+2. Iniciar Docker Desktop y, desde la raiz del repositorio, ejecutar:
+
 ```powershell
-docker compose -f docker-compose-simple.yml up -d            # SQL Server + Ollama
-docker exec ollama ollama pull qwen2.5:3b                    # solo la primera vez (1.9 GB)
-pip install -r requirements.txt
-python database/apply_dw_layer.py                            # vistas bi, tablas ops, cuenta wwi_app
-cd backend; npm install; npm run seed; npm start            # API en :4000
-cd frontend; npm install; npm run dev                        # UI en :5173
+docker compose -f docker-compose-simple.yml up -d
+docker exec ollama ollama pull qwen2.5:3b                    # solo la primera vez (~1.9 GB)
 ```
+
+3. Si la base `WideWorldImporters` aun no existe, conectarse con SSMS a `localhost,1433` usando la cuenta SA y el valor local de `MSSQL_SA_PASSWORD`. Confirmar que el backup esta visible para SQL Server en `/var/opt/mssql/backup/WideWorldImporters-Full.bak`. Obtener los nombres logicos con:
+
+```sql
+RESTORE FILELISTONLY
+FROM DISK = N'/var/opt/mssql/backup/WideWorldImporters-Full.bak';
+```
+
+4. Solo si `WideWorldImporters` no existe, restaurarla. Si los nombres logicos del backup coinciden con `WWI_Primary`, `WWI_UserData` y `WWI_Log`, usar:
+
+```sql
+IF DB_ID(N'WideWorldImporters') IS NULL
+BEGIN
+    RESTORE DATABASE [WideWorldImporters]
+    FROM DISK = N'/var/opt/mssql/backup/WideWorldImporters-Full.bak'
+    WITH MOVE N'WWI_Primary' TO N'/var/opt/mssql/data/WideWorldImporters.mdf',
+         MOVE N'WWI_UserData' TO N'/var/opt/mssql/data/WideWorldImporters_userdata.ndf',
+         MOVE N'WWI_Log' TO N'/var/opt/mssql/data/WideWorldImporters.ldf',
+         RECOVERY, STATS = 5;
+END;
+```
+
+No usar `WITH REPLACE` sobre una base existente. Si `RESTORE FILELISTONLY` muestra otros nombres, sustituir solo los nombres logicos de `MOVE`.
+
+5. Instalar dependencias Python desde la raiz y ejecutar el pipeline y las cargas dimensionales en orden:
+
+```powershell
+pip install -r requirements.txt
+python etl/main.py
+python etl/dw_schema.py
+python etl/dw_dimensions.py
+python etl/dw_facts.py
+python etl/dw_enrich.py
+python database/apply_dw_layer.py                            # vistas bi, tablas ops y cuenta wwi_app
+python etl/dw_reconcile.py
+python machine-learning/train.py
+python machine-learning/predict.py
+```
+
+6. Abrir dos terminales desde la raiz del repositorio. En la primera:
+
+```powershell
+Set-Location backend
+npm install
+npm run seed
+npm start
+```
+
+En la segunda:
+
+```powershell
+Set-Location frontend
+npm install
+npm run dev
+```
+
+Usuarios demo: `admin` y `analyst`; establecer sus contrasenas en `.env`. El primer ETL puede ejecutarse antes de crear `ops.etl_run_log`; el pipeline continua y registra ejecuciones una vez aplicada la capa operativa.
 
 ### Recarga del DW (si cambia el origen)
 1. `python -m etl.main` (staging; ~1 h por la carga fila a fila).

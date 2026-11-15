@@ -118,3 +118,16 @@ CREATE TABLE ops.assistant_audit (
     LatencyMs    INT NULL
 );
 GO
+
+-- Actualiza instalaciones que ya tenian Outcome con el tamano anterior.
+IF EXISTS (
+    SELECT 1
+    FROM sys.columns c
+    JOIN sys.types t ON t.user_type_id = c.user_type_id
+    WHERE c.object_id = OBJECT_ID('ops.assistant_audit','U')
+      AND c.name = 'Outcome'
+      AND t.name = 'nvarchar'
+      AND c.max_length < 80
+)
+    ALTER TABLE ops.assistant_audit ALTER COLUMN Outcome NVARCHAR(40) NOT NULL;
+GO

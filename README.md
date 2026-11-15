@@ -35,18 +35,35 @@ copy .env.example .env                                       # completa los valo
 docker compose -f docker-compose-simple.yml up -d            # SQL Server + Ollama
 docker exec ollama ollama pull qwen2.5:3b                    # primera vez (~1.9 GB)
 pip install -r requirements.txt
-python database/apply_dw_layer.py                            # vistas bi, tablas ops, cuenta wwi_app
-cd backend;  npm install; npm run seed; npm start            # API http://localhost:4000
-cd frontend; npm install; npm run dev                        # UI  http://localhost:5173
 ```
 
-Si el DW aun no existe, ejecutar primero el ETL (ver runbook en [07](documentation/07_SEGURIDAD_Y_OPERACION.md)). Usuarios demo: `admin` y `analyst`, con las contrasenas `DEMO_ADMIN_PASSWORD` / `DEMO_ANALYST_PASSWORD` de tu `.env`.
+**Carga inicial obligatoria:** si `WideWorldImporters` no existe en SQL Server, restaurar el `.bak` sin sobrescribir una base existente. Despues ejecutar el ETL, crear/cargar el DW y aplicar la capa `bi`/`ops` en el orden del [runbook de instalacion](documentation/07_SEGURIDAD_Y_OPERACION.md). No ejecutar `database/apply_dw_layer.py` antes de crear el DW. Usuarios demo: `admin` y `analyst`, con las contrasenas `DEMO_ADMIN_PASSWORD` / `DEMO_ANALYST_PASSWORD` de tu `.env`.
+
+Con el DW listo, iniciar API y frontend en terminales separadas:
+
+Terminal 1 (desde la raiz del repositorio):
+
+```powershell
+Set-Location backend
+npm install
+npm run seed
+npm start
+```
+
+Terminal 2 (desde la raiz del repositorio):
+
+```powershell
+Set-Location frontend
+npm install
+npm run dev
+```
 
 ## Pruebas
 
 ```powershell
-cd backend; npm test                      # 39 pruebas: API/KPIs vs origen, seguridad, alertas, WebSocket, asistente
-node generative-ai/run_eval.mjs           # 15 preguntas al asistente (requiere Ollama) -> RESULTADOS_PRUEBAS.md
+npm --prefix backend test                 # API, alertas, WebSocket y asistente (requiere SQL Server)
+node --test backend/test/assistant.test.js # pruebas unitarias del asistente, sin SQL Server
+node generative-ai/run_eval.mjs           # evaluacion funcional (requiere SQL Server y Ollama)
 python etl/dw_reconcile.py                # reconciliacion origen vs DW (10 comprobaciones)
 python machine-learning/predict.py --evaluate
 ```

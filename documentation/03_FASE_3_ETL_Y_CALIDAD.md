@@ -3,7 +3,9 @@
 **Duración Estimada:** 12-15 horas  
 **Inicio:** [Dia 2, 8:00 AM]  
 **Responsable:** Jetsón  
-**Estado:** ✅ COMPLETADO
+**Estado:** Implementado; la validacion integral debe repetirse en el entorno con SQL Server disponible.
+
+> **Nota de vigencia:** los tiempos, conteos y salidas mostrados en los ejemplos de este documento son historicos/ilustrativos y no sustituyen una ejecucion actual. La lista vigente de tablas fuente esta en `etl/config.py`. La calidad y los limites actuales del auditor se describen en `etl/README.md`.
 
 ---
 
@@ -66,24 +68,20 @@ Fase 3 implementa la capa de transformación de datos, donde los datos brutos de
 
 ### Fuente: WideWorldImporters
 
-| Tabla | Esquema | Filas Est. | Propósito |
-|-------|---------|-----------|----------|
-| Orders | Sales | 73,000 | Cabecera de órdenes de venta |
-| OrderLines | Sales | 231,000 | Detalle de líneas de venta |
-| Customers | Sales | 663 | Maestro de clientes |
-| CustomerCategories | Sales | 3 | Categorías de clientes |
-| Products | Warehouse | 227 | Maestro de productos |
-| ProductCategories | Warehouse | 4 | Categorías de productos |
-| People | Application | 305 | Personal (vendedores, etc) |
-| Cities | Application | 3,182 | Ciudades |
-| StateProvinces | Application | 54 | Estados/Provincias |
-| Countries | Application | 190 | Países |
+| Tabla | Esquema |
+|---|---|
+| Orders, OrderLines, Invoices, InvoiceLines | Sales |
+| CustomerCategories, BuyingGroups | Sales |
+| StockItems, Colors | Warehouse |
+| People, DeliveryMethods | Application |
 
-**Total de datos:** ~360,000 filas
+Son las diez tablas configuradas en `etl/config.py`; los conteos se obtienen durante cada ejecucion.
 
 ---
 
 ## 🔧 TRANSFORMACIONES APLICADAS
+
+> Los detalles de las transformaciones que siguen provienen del diseno inicial y no todos corresponden a las fuentes actuales. La configuracion vigente es `etl/config.py`; consultar `etl/transform.py` antes de afirmar que una regla se ejecuta.
 
 ### 3.2.1 Sales.Orders
 ```python
@@ -208,8 +206,8 @@ loader.load_to_staging_clean()   # Carga clean
 **Métricas calculadas:**
 - **Completeness:** % de celdas non-null
 - **Uniqueness:** % de filas sin duplicados
-- **Validity:** % de filas con valores válidos
-- **Consistency:** % de integridad referencial
+- **Validity:** verificacion simplificada de valores negativos en columnas ID numericas
+- **Consistency:** valor fijo 95.0 en el codigo actual; no es una medicion de integridad referencial
 
 ### etl/main.py
 **Orquestador principal** que:
@@ -269,6 +267,8 @@ TOTAL:          111.1s
 ======================================================================
 ```
 
+Las filas y duraciones de esta salida son un ejemplo historico, no resultados verificados en esta revision.
+
 ---
 
 ## 🔍 VALIDACIONES Y CONTROLES
@@ -292,8 +292,8 @@ Sales.Orders:
 |---------|-------------|---------|-----------------|
 | Completeness | % celdas no-null | non_nulls / total_cells * 100 | > 90% |
 | Uniqueness | % filas sin duplicados | (rows - duplicates) / rows * 100 | > 99% |
-| Validity | % valores válidos | valid_rows / total_rows * 100 | > 95% |
-| Consistency | Integridad referencial | calculated | > 98% |
+| Validity | Verificacion simplificada de IDs numericos no negativos | valid_rows / total_rows * 100 | > 95% |
+| Consistency | Placeholder fijo en el codigo; no mide integridad referencial | No aplica | No aplica |
 
 **Overall Score:** Promedio de las 4 métricas
 
@@ -303,19 +303,18 @@ Sales.Orders Quality:
   Completeness:  95.2%
   Uniqueness:    99.8%
   Validity:      97.1%
-  Consistency:   98.5%
-  OVERALL:       97.6% ✓ EXCELLENT
+  Consistency:   95.0% (placeholder, no medido)
+  OVERALL:       96.8% (ejemplo aritmetico, no resultado actual)
 ```
 
-### 3.4.3 Logging de Auditoría
+### 3.4.3 Logging de ejecucion
 
-Tabla `dbo.etl_audit_log`:
+El pipeline escribe un archivo `logs/etl_*.log`. Despues de aplicar las tablas operativas, el inicio/fin de una ejecucion se registra en `ops.etl_run_log`; la reconciliacion dimensional se guarda en `ops.reconciliation_result`.
 ```sql
-SELECT * FROM dbo.etl_audit_log
-ORDER BY ETLDate DESC;
+SELECT TOP 20 * FROM ops.etl_run_log ORDER BY StartedAt DESC;
 ```
 
-Campos: ETLDate, Phase, TableName, RowCount, Status, ErrorMessage, Duration_Seconds
+La auditoria de staging compara DataFrames en memoria. Los errores de insercion individuales se registran como advertencias y se omiten; validar logs y conteos persistidos antes de aceptar una carga.
 
 ---
 
