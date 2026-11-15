@@ -11,10 +11,10 @@ import logging
 SQL_SERVER_CONFIG: Dict[str, Any] = {
     "driver": "ODBC Driver 17 for SQL Server",
     "server": os.getenv("MSSQL_SERVER", "localhost,1433"),
-    "database": os.getenv("MSSQL_DATABASE", "master"),
+    "database": os.getenv("MSSQL_DATABASE", "WideWorldImporters"),
     "user": os.getenv("MSSQL_SA_USER", "sa"),
-    "password": os.getenv("MSSQL_SA_PASSWORD", "YourPassword123!"),
-    "encrypt": "yes",
+    "password": os.getenv("MSSQL_SA_PASSWORD", "P@ssw0rd123"),
+    "encrypt": "no",
     "trust_certificate": "yes",
 }
 
@@ -53,17 +53,18 @@ DW_SCHEMA = "dw"
 SOURCE_DATABASE = "WideWorldImporters"
 
 # Tables to Extract
+# Note: Excluding tables with unsupported ODBC types (e.g., Geography/Geometry in -151)
 SOURCE_TABLES = [
     "Sales.Orders",
     "Sales.OrderLines",
-    "Sales.Customers",
+    "Sales.Invoices",
+    "Sales.InvoiceLines",
     "Sales.CustomerCategories",
-    "Warehouse.Products",
-    "Warehouse.ProductCategories",
+    "Sales.BuyingGroups",
+    "Warehouse.StockItems",
+    "Warehouse.Colors",
     "Application.People",
-    "Application.Cities",
-    "Application.StateProvinces",
-    "Application.Countries",
+    "Application.DeliveryMethods",
 ]
 
 print(f"✓ Configuration loaded: {SQL_SERVER_CONFIG['server']} | {SOURCE_DATABASE}")
