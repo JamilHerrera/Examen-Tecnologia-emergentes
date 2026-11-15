@@ -153,9 +153,12 @@ CREATE TABLE dw.DimCustomer (
     Country NVARCHAR(100),
     
     -- Auditoría SCD Tipo 2
-    ValidFrom DATE NOT NULL,
-    ValidTo DATE DEFAULT '9999-12-31',
-    IsCurrent BIT DEFAULT 1
+    ValidFrom DATETIME2(7) NOT NULL,
+    ValidTo DATETIME2(7) NOT NULL DEFAULT '9999-12-31T23:59:59.9999999',
+    IsCurrent BIT NOT NULL DEFAULT 1,
+    CustomerCategory NVARCHAR(100),
+    BuyingGroup NVARCHAR(100),
+    GeographyKey INT
 );
 ```
 

@@ -60,7 +60,8 @@ STEPS = [
         LEFT JOIN Application.People p ON p.PersonID = c.PrimaryContactPersonID
         LEFT JOIN Sales.CustomerCategories cc ON cc.CustomerCategoryID = c.CustomerCategoryID
         LEFT JOIN Sales.BuyingGroups bg ON bg.BuyingGroupID = c.BuyingGroupID
-        LEFT JOIN dw.DimGeography g ON g.CityID = c.DeliveryCityID;
+        LEFT JOIN dw.DimGeography g ON g.CityID = c.DeliveryCityID
+        WHERE d.IsCurrent = 1;
         """,
     ),
     (

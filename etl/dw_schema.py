@@ -72,9 +72,13 @@ def create_dw_schema():
             StateProvince NVARCHAR(100),
             Country NVARCHAR(100),
             PostalCode NVARCHAR(20),
-            ValidFrom DATE NOT NULL,
-            ValidTo DATE DEFAULT '9999-12-31',
-            IsCurrent BIT DEFAULT 1
+            ValidFrom DATETIME2(7) NOT NULL,
+            ValidTo DATETIME2(7) NOT NULL
+                CONSTRAINT DF_DimCustomer_ValidTo DEFAULT ('9999-12-31T23:59:59.9999999'),
+            IsCurrent BIT NOT NULL DEFAULT 1,
+            CustomerCategory NVARCHAR(100),
+            BuyingGroup NVARCHAR(100),
+            GeographyKey INT
         );
         """)
         conn.connection.commit()
@@ -106,7 +110,8 @@ def create_dw_schema():
             StateProvince NVARCHAR(100),
             Country NVARCHAR(100) NOT NULL,
             Region NVARCHAR(100),
-            PostalCode NVARCHAR(20)
+            PostalCode NVARCHAR(20),
+            CityID INT
         );
         """)
         conn.connection.commit()
@@ -190,6 +195,29 @@ def create_dw_schema():
         """)
         conn.connection.commit()
         print("✓ Index on DimCustomer(IsCurrent) created")
+
+        cursor.execute("""
+        CREATE UNIQUE NONCLUSTERED INDEX UX_DimCustomer_CustomerID_ValidFrom
+            ON dw.DimCustomer(CustomerID, ValidFrom);
+        """)
+        conn.connection.commit()
+        print("✓ Unique index on DimCustomer version periods created")
+
+        cursor.execute("""
+        CREATE UNIQUE NONCLUSTERED INDEX UX_DimCustomer_Current
+            ON dw.DimCustomer(CustomerID)
+            WHERE IsCurrent = 1;
+        """)
+        conn.connection.commit()
+        print("✓ Unique filtered index on current DimCustomer rows created")
+
+        cursor.execute("""
+        CREATE UNIQUE NONCLUSTERED INDEX UX_DimGeography_CityID
+            ON dw.DimGeography(CityID)
+            WHERE CityID IS NOT NULL;
+        """)
+        conn.connection.commit()
+        print("✓ Unique filtered index on DimGeography city IDs created")
         
         cursor.execute("""
         CREATE NONCLUSTERED INDEX IDX_DimDate_Date 

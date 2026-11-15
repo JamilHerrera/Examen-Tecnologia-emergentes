@@ -54,7 +54,7 @@ pip install -r requirements.txt
 python etl/main.py
 ```
 
-El pipeline carga staging raw/clean y audita la transformacion; no sustituye la carga dimensional `dw_schema.py`, `dw_dimensions.py`, `dw_facts.py` y `dw_enrich.py`.
+El pipeline carga staging raw/clean y audita la transformacion; no sustituye la carga dimensional `dw_schema.py`, `dw_dimensions.py`, `dw_customer_scd2.py`, `dw_facts.py` y `dw_enrich.py`. Carga el historial de clientes despues de las dimensiones y antes de los hechos.
 
 **Tiempo:** depende del hardware y de la base. La carga actual inserta filas individualmente y puede tardar bastante; revisar el log generado en `logs/etl_*.log`.
 

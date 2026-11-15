@@ -20,7 +20,8 @@ La plataforma integra WideWorldImporters con un ETL en Python, un Data Warehouse
 | Docker y servicios | Docker Engine 27.5.1; `sql-server-2022` y `ollama` activos. Ollama tiene `qwen2.5:3b`. |
 | Suite completa del backend | 33/33 pruebas pasaron con SQL Server disponible (`npm test` desde `backend`). |
 | Compilacion React | Exitosa; Vite transformo 403 modulos. El chunk JavaScript minificado es de 664.94 kB (194.31 kB gzip), sobre el umbral de advertencia de 500 kB. |
-| Reconciliacion de datos | 10/10 comprobaciones pasaron (RunID 10005). Origen, staging limpio y `dw.FactSales` coinciden en 231,412 lineas y $177,634,276.40 en ventas netas; no hay hechos huerfanos ni geografia desconocida. |
+| Reconciliacion de datos | 13/13 comprobaciones pasaron (RunID 10008). Origen, staging limpio y `dw.FactSales` coinciden en 231,412 lineas y $177,634,276.40 en ventas netas; sin hechos huerfanos, errores de asignacion SCD2, traslapes ni geografia desconocida. |
+| Carga SCD2 de clientes | `dw.DimCustomer` contiene 713 versiones: 663 vigentes y 50 historicas validas. Se omitio 1 fila archivada de duracion cero (`ValidFrom = ValidTo`), que no representa un intervalo consultable. La segunda ejecucion actualizo las mismas 50 filas historicas sin duplicar versiones. |
 | Pruebas ETL | 4/4 pruebas unitarias pasaron. Integracion con SQL Server: carga correcta 2/2; rechazo inyectado 1/3 en staging raw devolvio fallo y conteos exactos. Las tablas de prueba fueron eliminadas. |
 | Migracion de auditoria | Se verifico en SQL Server `ops.assistant_audit.Outcome` como `nvarchar(40)`; se aplico el `ALTER` solo si el ancho anterior lo requeria. |
 | Entrenamiento ML | Exitoso; selecciono `rf_leaf5`. MAE de validacion: $87,715 vs $110,552 de la base; MAE de prueba: $127,721 vs $130,476; MAPE de prueba: 12.0% vs 12.1%. Modelo registrado: `sales-weekly-202611151623`. |
@@ -37,7 +38,6 @@ El asistente muestra los hechos consultados por separado de la interpretacion de
 
 ## Limitaciones conocidas
 
-- El historial real SCD tipo 2 de clientes no se carga desde `Sales.Customers_Archive`.
 - El alcance analitico implementado es ventas; compras, inventario historico y rentabilidad basada en costos no estan cubiertos.
 - Los datos de muestra terminan el 31 de mayo de 2016; el modelo semanal tiene una ventaja pequena sobre la linea base en el conjunto de prueba documentado.
 - La consistencia de staging no tiene aun una regla implementada: ahora se reporta como no medida y no se incluye en el score general. Una falla de insercion deja la carga marcada como fallida y con conteos de filas; filas insertadas previamente pueden permanecer en staging hasta repetir la carga.
@@ -48,7 +48,6 @@ El asistente muestra los hechos consultados por separado de la interpretacion de
 
 ## Trabajo pendiente para el cierre del proyecto
 
-- Implementar/cargar el historial SCD tipo 2 desde `Sales.Customers_Archive`.
 - Fortalecer la evaluacion semantica del asistente; los checks actuales no certifican la veracidad general de sus interpretaciones.
 - Rotar y evaluar la credencial antigua presente en el historial Git antes de hacer publico el repositorio.
 - Ampliar el alcance analitico mas alla de ventas si lo requiere la rubrica.

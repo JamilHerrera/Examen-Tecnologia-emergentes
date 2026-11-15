@@ -62,6 +62,7 @@ pip install -r requirements.txt
 python etl/main.py
 python etl/dw_schema.py
 python etl/dw_dimensions.py
+python etl/dw_customer_scd2.py
 python etl/dw_facts.py
 python etl/dw_enrich.py
 python database/apply_dw_layer.py                            # vistas bi, tablas ops y cuenta wwi_app
@@ -90,9 +91,11 @@ npm run dev
 Usuarios demo: `admin` y `analyst`; establecer sus contrasenas en `.env`. El primer ETL puede ejecutarse antes de crear `ops.etl_run_log`; el pipeline continua y registra ejecuciones una vez aplicada la capa operativa.
 
 ### Recarga del DW (si cambia el origen)
+`etl/dw_schema.py` elimina y vuelve a crear las tablas `dw.*`; ejecutar esta secuencia solo si se acepta reconstruir el DW y se cuenta con el respaldo requerido. No es una recarga incremental.
+
 1. `python -m etl.main` (staging; ~1 h por la carga fila a fila).
-2. `python etl/dw_schema.py`, `dw_dimensions.py`, `dw_facts.py`, `dw_enrich.py` (en ese orden).
-3. `python etl/dw_reconcile.py` — debe terminar con 10/10; si no, revisar `ops.reconciliation_result`.
+2. `python etl/dw_schema.py`, `dw_dimensions.py`, `dw_customer_scd2.py`, `dw_facts.py`, `dw_enrich.py` (en ese orden).
+3. `python etl/dw_reconcile.py` — debe terminar con 13/13; si no, revisar `ops.reconciliation_result`.
 4. `python machine-learning/predict.py` y, mensualmente, `train.py`.
 
 ### Problemas frecuentes

@@ -23,7 +23,8 @@ DESCRIPTIONS = {
         "CustomerKey": "Clave sustituta.", "CustomerID": "Clave natural (Sales.Customers.CustomerID).",
         "CustomerName": "Nombre comercial.", "PrimaryContactPerson": "Persona de contacto (dato personal: NO se expone en BI ni se envia a IA).",
         "City": "Ciudad de entrega.", "StateProvince": "Estado/provincia.", "Country": "Pais.", "PostalCode": "Codigo postal de entrega.",
-        "ValidFrom": "Inicio de vigencia de la version.", "ValidTo": "Fin de vigencia (9999-12-31 = vigente).",
+        "ValidFrom": "Inicio de vigencia de la version (DATETIME2(7)).",
+        "ValidTo": "Fin de vigencia exclusivo (9999-12-31 23:59:59.9999999 = vigente).",
         "IsCurrent": "1 si es la version vigente.", "CustomerCategory": "Categoria de cliente.", "BuyingGroup": "Grupo de compra.",
         "GeographyKey": "FK a DimGeography (ciudad de entrega)."}),
     "dw.DimProduct": ("Dimension producto (grano: articulo de inventario).", {

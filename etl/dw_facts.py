@@ -98,7 +98,10 @@ def populate_factsales():
             GETDATE() AS LoadedDate
         FROM staging_clean.Sales_OrderLines_clean sol
         INNER JOIN staging_clean.Sales_Orders_clean so ON sol.OrderID = so.OrderID
-        LEFT JOIN dw.DimCustomer dc ON so.CustomerID = dc.CustomerID
+        LEFT JOIN dw.DimCustomer dc
+            ON dc.CustomerID = TRY_CONVERT(INT, so.CustomerID)
+           AND CONVERT(DATETIME2(7), TRY_CONVERT(DATE, so.OrderDate)) >= dc.ValidFrom
+           AND CONVERT(DATETIME2(7), TRY_CONVERT(DATE, so.OrderDate)) < dc.ValidTo
         LEFT JOIN dw.DimProduct dp ON CAST(ROUND(CAST(sol.StockItemID AS FLOAT), 0) AS VARCHAR) = CAST(dp.StockItemID AS VARCHAR)
         LEFT JOIN dw.DimDate dd ON CAST(SUBSTRING(so.OrderDate, 1, 10) AS DATE) = dd.Date
         """

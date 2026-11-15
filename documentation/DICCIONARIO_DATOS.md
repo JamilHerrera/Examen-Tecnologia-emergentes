@@ -71,8 +71,8 @@ Dimension cliente con historial SCD tipo 2 (ValidFrom/ValidTo/IsCurrent).
 | StateProvince | nvarchar(100) | si |  | Estado/provincia. |
 | Country | nvarchar(100) | si |  | Pais. |
 | PostalCode | nvarchar(20) | si |  | Codigo postal de entrega. |
-| ValidFrom | date | no |  | Inicio de vigencia de la version. |
-| ValidTo | date | si |  | Fin de vigencia (9999-12-31 = vigente). |
+| ValidFrom | datetime2 | no |  | Inicio de vigencia de la version (DATETIME2(7)). |
+| ValidTo | datetime2 | no |  | Fin de vigencia exclusivo (9999-12-31 23:59:59.9999999 = vigente). |
 | IsCurrent | bit | si |  | 1 si es la version vigente. |
 | CustomerCategory | nvarchar(100) | si |  | Categoria de cliente. |
 | BuyingGroup | nvarchar(100) | si |  | Grupo de compra. |

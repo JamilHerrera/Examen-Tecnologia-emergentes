@@ -36,6 +36,10 @@ CHECKS = [
      "SELECT COUNT(*) FROM Sales.Customers",
      "SELECT COUNT(*) FROM dw.DimCustomer WHERE IsCurrent = 1",
      "Solo version vigente (SCD tipo 2)"),
+    ("Historial de clientes: origen vs DimCustomer",
+     "SELECT COUNT(*) FROM Sales.Customers_Archive WHERE ValidFrom < ValidTo",
+     "SELECT COUNT(*) FROM dw.DimCustomer WHERE IsCurrent = 0",
+     "Solo periodos historicos con vigencia no vacia"),
     ("Productos: origen vs DimProduct",
      "SELECT COUNT(*) FROM Warehouse.StockItems",
      "SELECT COUNT(*) FROM dw.DimProduct",
@@ -51,6 +55,33 @@ CHECKS = [
            OR NOT EXISTS (SELECT 1 FROM dw.DimCustomer c WHERE c.CustomerKey = f.CustomerKey)
            OR NOT EXISTS (SELECT 1 FROM dw.DimProduct p WHERE p.ProductKey = f.ProductKey)
            OR NOT EXISTS (SELECT 1 FROM dw.DimGeography g WHERE g.GeographyKey = f.GeographyKey)""",
+     None),
+    ("Hechos con una sola version SCD tipo 2",
+     "SELECT 0",
+     """SELECT COUNT(*) FROM (
+            SELECT f.SalesFactKey
+            FROM dw.FactSales f
+            LEFT JOIN staging_clean.Sales_Orders_clean so
+                ON TRY_CONVERT(INT, so.OrderID) = f.OrderID
+            LEFT JOIN dw.DimCustomer c
+                ON c.CustomerID = TRY_CONVERT(INT, so.CustomerID)
+               AND CONVERT(DATETIME2(7), TRY_CONVERT(DATE, so.OrderDate)) >= c.ValidFrom
+               AND CONVERT(DATETIME2(7), TRY_CONVERT(DATE, so.OrderDate)) < c.ValidTo
+            GROUP BY f.SalesFactKey, f.CustomerKey
+            HAVING COUNT(c.CustomerKey) <> 1
+                OR MIN(c.CustomerKey) <> f.CustomerKey
+        ) unresolved""",
+     "OrderDate solo tiene precision de dia y se resuelve a medianoche"),
+    ("Periodos SCD tipo 2 sin traslapes",
+     "SELECT 0",
+     """SELECT COUNT(*) FROM (
+            SELECT ValidFrom,
+                   LAG(ValidTo) OVER (
+                       PARTITION BY CustomerID ORDER BY ValidFrom
+                   ) AS PreviousValidTo
+            FROM dw.DimCustomer
+        ) periods
+        WHERE PreviousValidTo > ValidFrom""",
      None),
     ("Hechos sin geografia real = 0",
      "SELECT 0",
