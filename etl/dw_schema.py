@@ -30,7 +30,18 @@ def create_dw_schema():
         
         # Drop tables in correct order (dependencies first)
         print("🔄 Dropping existing tables...")
-        for table in ['FactSales', 'DimCustomer', 'DimProduct', 'DimGeography', 'DimDate']:
+        for table in [
+            'FactInventorySnapshot',
+            'FactStockMovement',
+            'FactPurchaseLine',
+            'FactInvoiceProfit',
+            'DimSupplier',
+            'FactSales',
+            'DimCustomer',
+            'DimProduct',
+            'DimGeography',
+            'DimDate',
+        ]:
             try:
                 cursor.execute(f"IF OBJECT_ID('dw.{table}', 'U') IS NOT NULL DROP TABLE dw.{table};")
                 conn.connection.commit()

@@ -165,7 +165,7 @@ async function monthlySalesDropCandidates(fresh, threshold) {
       observedValue: Math.round(r.cur * 100) / 100, thresholdValue: Math.round(r.prev * (1 - threshold / 100) * 100) / 100,
       referencePeriod: `${month} vs ${ref.from.slice(0, 7)} (caida ${drop.toFixed(1)}%, umbral ${threshold}%)`,
       source: 'rule', dedupKey: `rule:sales_drop:month:${r.entity}:${month}`,
-      explanation: `Las ventas netas de ${r.entity} en ${month} (${Math.round(r.cur).toLocaleString('en-US')} USD) cayeron ${drop.toFixed(1)}% frente a ${ref.from.slice(0, 7)} (${Math.round(r.prev).toLocaleString('en-US')} USD).`,
+      explanation: `Las ventas netas de ${r.entity} en ${month} (${Math.round(r.cur).toLocaleString('en-GB')} GBP) cayeron ${drop.toFixed(1)}% frente a ${ref.from.slice(0, 7)} (${Math.round(r.prev).toLocaleString('en-GB')} GBP).`,
       recommendedAction: 'Revisar las categorias y regiones con mayor caida en el dashboard y validar la carga del DW.',
       parentPeriod: period,
     }];
@@ -190,7 +190,7 @@ async function weeklySalesDropCandidates(fresh, threshold) {
     observedValue: Number(latest.NetSales), thresholdValue: Math.round(avg * (1 - threshold / 100) * 100) / 100,
     referencePeriod: `semana ${week} vs promedio de las 4 semanas previas (caida ${drop.toFixed(1)}%, umbral ${threshold}%)`,
     source: 'rule', dedupKey: `rule:sales_drop:week:Total:${week}`,
-    explanation: `Las ventas de la semana ${week} (${Math.round(Number(latest.NetSales)).toLocaleString('en-US')} USD) estan ${drop.toFixed(1)}% por debajo del promedio de las 4 semanas previas (${Math.round(avg).toLocaleString('en-US')} USD).`,
+    explanation: `Las ventas de la semana ${week} (${Math.round(Number(latest.NetSales)).toLocaleString('en-GB')} GBP) estan ${drop.toFixed(1)}% por debajo del promedio de las 4 semanas previas (${Math.round(avg).toLocaleString('en-GB')} GBP).`,
     recommendedAction: 'Verificar si la caida es estacional o por datos incompletos antes de actuar.',
   }];
 }
@@ -207,7 +207,7 @@ async function forecastLowCandidates(fresh, belowPct) {
     type: 'forecast_low', severity: next.value < 0.7 * avg ? 'high' : 'medium', indicator: 'Prediccion de ventas semanales', entity: 'Total',
     observedValue: next.value, thresholdValue: Math.round(threshold * 100) / 100, referencePeriod: `semana ${next.period} (horizonte ${next.step}) vs ${belowPct}% del promedio de 8 semanas`,
     source: 'model', modelVersion: f.model.version, dedupKey: `model:forecast_low:${f.model.version}:${next.period}`,
-    explanation: `PREDICCION: el modelo ${f.model.version} estima ${Math.round(next.value).toLocaleString('en-US')} USD para la semana ${next.period} (intervalo ${Math.round(next.lower).toLocaleString('en-US')} a ${Math.round(next.upper).toLocaleString('en-US')}), por debajo del ${belowPct}% del promedio de las ultimas 8 semanas (${Math.round(avg).toLocaleString('en-US')} USD).`,
+    explanation: `PREDICCION: el modelo ${f.model.version} estima ${Math.round(next.value).toLocaleString('en-GB')} GBP para la semana ${next.period} (intervalo ${Math.round(next.lower).toLocaleString('en-GB')} a ${Math.round(next.upper).toLocaleString('en-GB')}), por debajo del ${belowPct}% del promedio de las ultimas 8 semanas (${Math.round(avg).toLocaleString('en-GB')} GBP).`,
     recommendedAction: 'Anticipar acciones comerciales; recordar que es una prediccion con incertidumbre.',
   }];
 }

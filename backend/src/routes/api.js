@@ -6,6 +6,9 @@ import {
   KPI_DEFINITIONS, ValidationError, addDays, addMonths, getBreakdown, getDetail, getDimensionValues,
   getFreshness, getKpis, getOrder, getTrend, parseFilters,
 } from '../services/analytics.js';
+import {
+  getInventoryAnalytics, getProfitabilityAnalytics, getPurchasingAnalytics,
+} from '../services/businessAnalytics.js';
 import { snapshotMetrics } from '../metrics.js';
 import { requireRole } from '../auth.js';
 import { mlRouter } from './ml.js';
@@ -88,6 +91,18 @@ router.get('/breakdown', wrap(async (req, res) => {
 router.get('/detail', wrap(async (req, res) => {
   const filters = await resolveFilters(req.query);
   res.json(await getDetail(filters, req.query));
+}));
+
+router.get('/business/purchases', wrap(async (req, res) => {
+  res.json(await getPurchasingAnalytics(await resolveFilters(req.query)));
+}));
+
+router.get('/business/profitability', wrap(async (req, res) => {
+  res.json(await getProfitabilityAnalytics(await resolveFilters(req.query)));
+}));
+
+router.get('/business/inventory', wrap(async (req, res) => {
+  res.json(await getInventoryAnalytics(await resolveFilters(req.query)));
 }));
 
 router.get('/orders/:orderId', wrap(async (req, res) => {

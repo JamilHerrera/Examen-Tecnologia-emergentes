@@ -3,6 +3,7 @@ import assert from 'node:assert/strict';
 import sql from 'mssql';
 import { createApp } from '../src/app.js';
 import { closePool } from '../src/db.js';
+import { TOOLS } from '../src/assistant/tools.js';
 
 let server;
 let base;
@@ -58,6 +59,7 @@ test('login invalido devuelve 401 y no revela si el usuario existe', async () =>
 test('los endpoints exigen autenticacion', async () => {
   assert.equal((await get('/kpis', null)).status, 401);
   assert.equal((await get('/kpis', 'token-falso')).status, 401);
+  assert.equal((await get('/business/purchases', null)).status, 401);
 });
 
 test('solo admin accede a metricas operativas', async () => {
@@ -82,6 +84,69 @@ test('KPI de ventas netas coincide con consulta independiente al origen', async 
   assert.equal(body.kpis.activeCustomers.value, s.customers);
   assert.equal(body.kpis.units.value, Number(s.units));
   assert.ok(Math.abs(body.kpis.avgTicket.value - Number(s.sales) / s.orders) < 0.01);
+});
+
+test('el asistente presenta los importes de ventas en GBP', async () => {
+  const result = await TOOLS.sales_summary({
+    period: { from: '2016-01-01', to: '2016-03-31', label: '2016-T1', previousAvailable: false },
+  });
+  assert.equal(result.hasData, true);
+  assert.match(result.facts[1], /^Ventas netas del periodo: GBP /);
+  assert.match(result.facts[2], /ticket promedio: GBP /);
+});
+
+test('compras concilian con facturas de proveedor y exponen importes en GBP', async () => {
+  const res = await get('/business/purchases?from=2013-01-01&to=2016-05-31');
+  assert.equal(res.status, 200);
+  const body = await res.json();
+  const source = await sa.request().query(`
+    SELECT SUM(st.AmountExcludingTax) AS purchaseAmount
+    FROM Purchasing.SupplierTransactions st
+    JOIN Application.TransactionTypes tt ON tt.TransactionTypeID = st.TransactionTypeID
+    WHERE tt.TransactionTypeName = N'Supplier Invoice'
+      AND st.TransactionDate BETWEEN '2013-01-01' AND '2016-05-31'`);
+  assert.equal(body.currency, 'GBP');
+  assert.ok(Math.abs(body.summary.purchaseAmount - Number(source.recordset[0].purchaseAmount)) < 0.01);
+  assert.equal(body.summary.lines, 8358);
+  assert.ok(Math.abs(body.series.reduce((sum, row) => sum + row.purchaseAmount, 0) - body.summary.purchaseAmount) < 0.01);
+});
+
+test('rentabilidad concilia ventas y utilidad con lineas de factura de venta', async () => {
+  const res = await get('/business/profitability?from=2013-01-01&to=2016-05-31');
+  assert.equal(res.status, 200);
+  const body = await res.json();
+  const source = await sa.request().query(`
+    SELECT SUM(line.ExtendedPrice) AS netSales,
+           SUM(line.LineProfit) AS profit,
+           COUNT(DISTINCT line.InvoiceID) AS invoices
+    FROM Sales.InvoiceLines line
+    JOIN Sales.Invoices invoice ON invoice.InvoiceID = line.InvoiceID
+    WHERE invoice.InvoiceDate BETWEEN '2013-01-01' AND '2016-05-31'`);
+  assert.equal(body.currency, 'GBP');
+  assert.ok(Math.abs(body.summary.netSales - Number(source.recordset[0].netSales)) < 0.01);
+  assert.ok(Math.abs(body.summary.profit - Number(source.recordset[0].profit)) < 0.01);
+  assert.equal(body.summary.invoices, source.recordset[0].invoices);
+  assert.ok(Math.abs(body.series.reduce((sum, row) => sum + row.profit, 0) - body.summary.profit) < 0.01);
+});
+
+test('inventario muestra movimientos y snapshot vigente sin afirmar saldos historicos', async () => {
+  const res = await get('/business/inventory?from=2013-01-01&to=2016-05-31');
+  assert.equal(res.status, 200);
+  const body = await res.json();
+  const movements = await sa.request().query(`
+    SELECT COUNT_BIG(*) AS transactions, SUM(Quantity) AS netMovement
+    FROM Warehouse.StockItemTransactions
+    WHERE TransactionOccurredWhen >= '2013-01-01'
+      AND TransactionOccurredWhen < '2016-06-01'`);
+  const stock = await sa.request().query(`
+    SELECT COUNT_BIG(*) AS items, SUM(QuantityOnHand) AS unitsOnHand,
+           MAX(CAST(LastEditedWhen AS DATE)) AS snapshotDate
+    FROM Warehouse.StockItemHoldings`);
+  assert.equal(body.movements.transactions, Number(movements.recordset[0].transactions));
+  assert.ok(Math.abs(body.movements.netMovement - Number(movements.recordset[0].netMovement)) < 0.01);
+  assert.equal(body.snapshot.items, Number(stock.recordset[0].items));
+  assert.equal(body.snapshot.unitsOnHand, Number(stock.recordset[0].unitsOnHand));
+  assert.equal(body.snapshot.date, '2016-05-31');
 });
 
 test('filtros combinados no duplican importes y la suma por categoria iguala el total', async () => {
@@ -128,6 +193,7 @@ test('drill-down a pedido devuelve sus lineas y el total cuadra', async () => {
 
 test('entradas invalidas se rechazan con 400 y la inyeccion SQL es inocua', async () => {
   assert.equal((await get('/kpis?from=ayer&to=hoy')).status, 400);
+  assert.equal((await get('/business/inventory?from=ayer&to=2020-03-01')).status, 400);
   assert.equal((await get('/breakdown?by=CustomerName;DROP TABLE x')).status, 400);
   assert.equal((await get('/detail?sort=NetSales;--')).status, 400);
   const inj = await get("/kpis?from=2016-01-01&to=2016-03-31&category=' OR 1=1 --");

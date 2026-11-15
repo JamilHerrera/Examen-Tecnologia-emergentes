@@ -66,6 +66,7 @@ python etl/dw_customer_scd2.py
 python etl/dw_facts.py
 python etl/dw_enrich.py
 python database/apply_dw_layer.py                            # vistas bi, tablas ops y cuenta wwi_app
+python etl/dw_analytics.py                                   # compras, rentabilidad e inventario
 python etl/dw_reconcile.py
 python machine-learning/train.py
 python machine-learning/predict.py
@@ -95,8 +96,9 @@ Usuarios demo: `admin` y `analyst`; establecer sus contrasenas en `.env`. El pri
 
 1. `python -m etl.main` (staging; ~1 h por la carga fila a fila).
 2. `python etl/dw_schema.py`, `dw_dimensions.py`, `dw_customer_scd2.py`, `dw_facts.py`, `dw_enrich.py` (en ese orden).
-3. `python etl/dw_reconcile.py` — debe terminar con 13/13; si no, revisar `ops.reconciliation_result`.
-4. `python machine-learning/predict.py` y, mensualmente, `train.py`.
+3. `python database/apply_dw_layer.py` y `python etl/dw_analytics.py` para crear vistas/tablas y recargar los hechos de negocio.
+4. `python etl/dw_reconcile.py` — todas las comprobaciones deben pasar; si no, revisar `ops.reconciliation_result`.
+5. `python machine-learning/predict.py` y, mensualmente, `train.py`.
 
 ### Problemas frecuentes
 | Sintoma | Causa / solucion |

@@ -19,6 +19,7 @@ El navegador **nunca** se conecta a SQL Server; el backend usa la cuenta `wwi_ap
 | Estados de carga, error y sin datos | Componente `Status` en cada panel (con boton Reintentar) |
 | Escritorio y movil | CSS responsive (rejilla de 2 columnas → 1 en < 900 px) |
 | Informacion predictiva identificada | Panel "Prediccion de ventas semanales" con etiqueta PREDICCION y linea base |
+| Analitica complementaria | Pestana Negocio: compras, utilidad por factura y movimientos/snapshot de inventario |
 
 ## Definicion de KPIs
 
@@ -26,20 +27,25 @@ Fuente de todos: `bi.vw_sales_detail` (grano linea de pedido). Responsable indic
 
 | KPI | Proposito | Formula | Unidad | Responsable |
 |---|---|---|---|---|
-| Ventas netas | Ingreso comercial del periodo | `SUM(Quantity × UnitPrice)`, sin impuestos | USD | Direccion Comercial |
+| Ventas netas | Ingreso comercial del periodo | `SUM(Quantity × UnitPrice)`, sin impuestos | GBP | Direccion Comercial |
 | Pedidos | Volumen de transacciones | `COUNT(DISTINCT OrderID)` | pedidos | Direccion Comercial |
-| Ticket promedio | Valor medio por pedido | Ventas netas / Pedidos | USD/pedido | Direccion Comercial |
+| Ticket promedio | Valor medio por pedido | Ventas netas / Pedidos | GBP/pedido | Direccion Comercial |
 | Unidades vendidas | Volumen fisico | `SUM(Quantity)` | unidades | Operaciones |
 | Clientes activos | Amplitud de la base de clientes | `COUNT(DISTINCT CustomerKey)` | clientes | Marketing |
 | Crecimiento de ventas | Variacion vs periodo anterior | (Actual − Anterior) / Anterior × 100 | % | Direccion Comercial |
 
 El **periodo anterior** es el inmediato previo de igual duracion (por defecto, los 12 meses calendario previos al rango).
 
+## Analitica de negocio
+
+Las rutas `GET /api/business/purchases`, `/api/business/profitability` y `/api/business/inventory` alimentan la pestana *Negocio*. Los importes se expresan en GBP. Compras muestra facturas conciliadas con lineas recibidas; rentabilidad muestra `ExtendedPrice` y `LineProfit` por linea de factura; inventario distingue movimientos mensuales del snapshot observado al 31-may-2016. No se presentan saldos historicos reconstruidos.
+
 ## Validacion
 
-Pruebas automatizadas: `cd backend && npm test` (`backend/test/api.test.js`, 13 pruebas).
+Pruebas automatizadas: `cd backend && npm test` (`backend/test/api.test.js`, 17 pruebas).
 
-- **KPI vs consulta SQL independiente:** ventas, pedidos, clientes y unidades de 2016-T1 se comparan contra `Sales.Orders`/`Sales.OrderLines` (origen, no DW). Ejemplo: ventas netas T1 2016 = **$13,518,732** en ambos.
+- **KPI vs consulta SQL independiente:** ventas, pedidos, clientes y unidades de 2016-T1 se comparan contra `Sales.Orders`/`Sales.OrderLines` (origen, no DW). Ejemplo: ventas netas T1 2016 = **GBP 13,518,732** en ambos.
+- **Analitica de negocio:** compras y rentabilidad se concilian contra facturas de proveedor y lineas de factura de venta; movimientos y snapshot se comparan contra sus tablas fuente.
 - **Sin duplicacion por joins:** con filtros combinados (2015, region Southeast) la suma por categoria iguala el KPI y coincide con el origen.
 - **Periodos sin datos:** `from=2030…` devuelve `hasData=false` y ceros.
 - **Filtros combinados y entradas hostiles:** fechas invalidas, `by=…;DROP TABLE`, `sort=…;--` → HTTP 400; texto `' OR 1=1 --` en un filtro se trata como valor.

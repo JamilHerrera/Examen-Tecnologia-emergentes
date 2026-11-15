@@ -5,8 +5,8 @@ import { loadForecast } from '../routes/ml.js';
  * Herramientas analiticas APROBADAS del asistente. El modelo de lenguaje nunca escribe ni
  * ejecuta SQL: solo se ejecutan estas funciones con parametros validados (periodo y dimension).
  */
-const usd = (v) => `$${Math.round(v).toLocaleString('en-US')}`;
-const usd2 = (v) => `$${v.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
+const gbp = (v) => `GBP ${Math.round(v).toLocaleString('en-GB')}`;
+const gbp2 = (v) => `GBP ${v.toLocaleString('en-GB', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
 const pct = (v) => (v == null ? 'n/d' : `${v >= 0 ? '+' : ''}${v.toFixed(1)}%`);
 const growth = (cur, prev) => (prev ? ((cur - prev) / prev) * 100 : null);
 const range = (p) => `${p.from} a ${p.to}`;
@@ -38,12 +38,12 @@ export const TOOLS = {
     if (!cur.hasData) return { hasData: false, facts: [], sources: [] };
     const facts = [
       `Periodo analizado: ${period.label} (${range(period)}).`,
-      `Ventas netas del periodo: ${usd(cur.netSales)}.`,
-      `Pedidos: ${cur.orders.toLocaleString('en-US')}; ticket promedio: ${usd2(cur.avgTicket)}; unidades: ${cur.units.toLocaleString('en-US')}; clientes activos: ${cur.activeCustomers.toLocaleString('en-US')}.`,
+      `Ventas netas del periodo: ${gbp(cur.netSales)}.`,
+      `Pedidos: ${cur.orders.toLocaleString('en-US')}; ticket promedio: ${gbp2(cur.avgTicket)}; unidades: ${cur.units.toLocaleString('en-US')}; clientes activos: ${cur.activeCustomers.toLocaleString('en-US')}.`,
     ];
     if (period.previousAvailable) {
       const prev = await totals(period.previous);
-      facts.push(`Periodo anterior (${range(period.previous)}): ventas netas ${usd(prev.netSales)}; variacion ${pct(growth(cur.netSales, prev.netSales))}.`);
+      facts.push(`Periodo anterior (${range(period.previous)}): ventas netas ${gbp(prev.netSales)}; variacion ${pct(growth(cur.netSales, prev.netSales))}.`);
     }
     return { hasData: true, facts, sources: [source('sales_summary', period)] };
   },
@@ -61,9 +61,9 @@ export const TOOLS = {
     const row = (label, c, p, f) => `${label}: ${f(c)} vs ${f(p)} (${pct(growth(c, p))}).`;
     const facts = [
       `Comparacion de ${period.label} (${range(period)}) contra el periodo anterior (${range(period.previous)}).`,
-      row('Ventas netas', cur.netSales, prev.netSales, usd),
+      row('Ventas netas', cur.netSales, prev.netSales, gbp),
       row('Pedidos', cur.orders, prev.orders, (v) => v.toLocaleString('en-US')),
-      row('Ticket promedio', cur.avgTicket, prev.avgTicket, usd2),
+      row('Ticket promedio', cur.avgTicket, prev.avgTicket, gbp2),
       row('Unidades', cur.units, prev.units, (v) => v.toLocaleString('en-US')),
       row('Clientes activos', cur.activeCustomers, prev.activeCustomers, (v) => v.toLocaleString('en-US')),
     ];
@@ -84,7 +84,7 @@ export const TOOLS = {
     const sorted = [...rows].filter((r) => r.growthPct != null).sort((a, b) => b.growthPct - a.growthPct);
     const facts = [
       `${label}s: ${period.label} (${range(period)}) vs periodo anterior (${range(period.previous)}).`,
-      ...sorted.map((r) => `${label} ${r.name}: ${usd(r.current)} vs ${usd(r.previous)} (${pct(r.growthPct)}).`),
+      ...sorted.map((r) => `${label} ${r.name}: ${gbp(r.current)} vs ${gbp(r.previous)} (${pct(r.growthPct)}).`),
     ];
     const declines = sorted.filter((r) => r.growthPct <= -5);
     facts.push(declines.length
@@ -99,7 +99,7 @@ export const TOOLS = {
     if (!rows.length) return { hasData: false, facts: [], sources: [] };
     const facts = [
       `Top ${rows.length} por ventas netas en ${period.label} (${range(period)}), dimension ${names[dimension] ?? dimension}:`,
-      ...rows.map((r, i) => `${i + 1}. ${r.name}: ${usd(r.netSales)} (${r.sharePct.toFixed(1)}% del total).`),
+      ...rows.map((r, i) => `${i + 1}. ${r.name}: ${gbp(r.netSales)} (${r.sharePct.toFixed(1)}% del total).`),
     ];
     return { hasData: true, facts, sources: [source('top_entities', period)] };
   },
@@ -109,7 +109,7 @@ export const TOOLS = {
     if (!def) return { hasData: false, facts: [], sources: [], reason: 'No reconozco ese indicador.' };
     const cur = await totals(period);
     const value = cur[def.id];
-    const fmtValue = def.id === 'growth' ? pct(value) : ['netSales'].includes(def.id) ? usd(value) : def.id === 'avgTicket' ? usd2(value) : Number(value).toLocaleString('en-US');
+    const fmtValue = def.id === 'growth' ? pct(value) : ['netSales'].includes(def.id) ? gbp(value) : def.id === 'avgTicket' ? gbp2(value) : Number(value).toLocaleString('en-US');
     const facts = [
       `Indicador: ${def.name} (${def.unit}). Proposito: ${def.purpose}`,
       `Formula: ${def.formula}. Fuente: ${def.source}. Responsable: ${def.owner}.`,
@@ -124,8 +124,8 @@ export const TOOLS = {
     const t = f.model.metrics.test;
     const facts = [
       `PREDICCION (no es dato historico) del modelo ${f.model.version} (${f.model.algorithm}), horizonte ${f.model.horizon} semanas.`,
-      ...f.predictions.map((p) => `Semana ${p.period}: prediccion ${usd(p.value)} (intervalo ${usd(p.lower)} a ${usd(p.upper)}); linea base ${usd(p.baseline)}.`),
-      `Error medio absoluto en prueba: modelo ${usd(t.model.mae)} vs linea base ${usd(t.baseline.mae)} (MAPE ${t.model.mape.toFixed(1)}% vs ${t.baseline.mape.toFixed(1)}%).`,
+      ...f.predictions.map((p) => `Semana ${p.period}: prediccion ${gbp(p.value)} (intervalo ${gbp(p.lower)} a ${gbp(p.upper)}); linea base ${gbp(p.baseline)}.`),
+      `Error medio absoluto en prueba: modelo ${gbp(t.model.mae)} vs linea base ${gbp(t.baseline.mae)} (MAPE ${t.model.mape.toFixed(1)}% vs ${t.baseline.mape.toFixed(1)}%).`,
     ];
     return { hasData: true, facts, sources: [{ tool: 'forecast', dataset: 'ops.ml_prediction / ops.ml_model_registry', period: f.model.testPeriod }], prediction: true };
   },

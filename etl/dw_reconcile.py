@@ -87,6 +87,78 @@ CHECKS = [
      "SELECT 0",
      "SELECT COUNT(*) FROM dw.FactSales WHERE GeographyKey = 1",
      "GeographyKey=1 es el miembro 'Unknown'"),
+    ("Lineas de factura: origen vs FactInvoiceProfit",
+     "SELECT COUNT_BIG(*) FROM Sales.InvoiceLines",
+     "SELECT COUNT_BIG(*) FROM dw.FactInvoiceProfit",
+     "Grano = linea de factura"),
+    ("Ventas facturadas netas: origen vs FactInvoiceProfit",
+     "SELECT SUM(CAST(ExtendedPrice AS DECIMAL(24,2))) FROM Sales.InvoiceLines",
+     "SELECT SUM(CAST(NetSales AS DECIMAL(24,2))) FROM dw.FactInvoiceProfit",
+     "Importe de factura antes de impuestos"),
+    ("Utilidad de factura: origen vs FactInvoiceProfit",
+     "SELECT SUM(CAST(LineProfit AS DECIMAL(24,2))) FROM Sales.InvoiceLines",
+     "SELECT SUM(CAST(LineProfit AS DECIMAL(24,2))) FROM dw.FactInvoiceProfit",
+     "Utilidad informada por WideWorldImporters"),
+    ("Lineas de compra recibidas: origen vs FactPurchaseLine",
+     """SELECT COUNT_BIG(*) FROM Purchasing.PurchaseOrderLines line
+        WHERE line.ReceivedOuters > 0
+          AND EXISTS (
+              SELECT 1 FROM Purchasing.SupplierTransactions txn
+              JOIN Application.TransactionTypes type
+                  ON type.TransactionTypeID = txn.TransactionTypeID
+              WHERE type.TransactionTypeName = N'Supplier Invoice'
+                AND txn.PurchaseOrderID = line.PurchaseOrderID
+          )""",
+     "SELECT COUNT_BIG(*) FROM dw.FactPurchaseLine",
+     "Solo lineas recibidas y respaldadas por factura de proveedor"),
+    ("Compras netas: factura de proveedor vs FactPurchaseLine",
+     """SELECT SUM(CAST(line.ExpectedUnitPricePerOuter * line.ReceivedOuters AS DECIMAL(24,2)))
+        FROM Purchasing.PurchaseOrderLines line
+        JOIN Purchasing.SupplierTransactions txn
+            ON txn.PurchaseOrderID = line.PurchaseOrderID
+        JOIN Application.TransactionTypes type
+            ON type.TransactionTypeID = txn.TransactionTypeID
+        WHERE type.TransactionTypeName = N'Supplier Invoice' AND line.ReceivedOuters > 0""",
+     "SELECT SUM(CAST(PurchaseAmountExclTax AS DECIMAL(24,2))) FROM dw.FactPurchaseLine",
+     "Asignacion a producto debe reconciliar al importe de factura antes de impuestos"),
+    ("Proveedores: origen vs DimSupplier",
+     "SELECT COUNT_BIG(*) FROM Purchasing.Suppliers",
+     "SELECT COUNT_BIG(*) FROM dw.DimSupplier",
+     "La dimension contiene solo ID, nombre y categoria"),
+    ("Movimientos de inventario: origen vs FactStockMovement",
+     "SELECT COUNT_BIG(*) FROM Warehouse.StockItemTransactions",
+     "SELECT COUNT_BIG(*) FROM dw.FactStockMovement",
+     "Grano = movimiento de inventario"),
+    ("Cantidad neta de movimientos: origen vs FactStockMovement",
+     "SELECT SUM(CAST(Quantity AS DECIMAL(24,3))) FROM Warehouse.StockItemTransactions",
+     "SELECT SUM(CAST(Quantity AS DECIMAL(24,3))) FROM dw.FactStockMovement",
+     "Cantidad firmada: entradas positivas y salidas negativas"),
+    ("Snapshot de inventario: origen vs FactInventorySnapshot",
+     "SELECT COUNT_BIG(*) FROM Warehouse.StockItemHoldings",
+     "SELECT COUNT_BIG(*) FROM dw.FactInventorySnapshot",
+     "Una observacion por articulo; no representa historial de saldos"),
+    ("Unidades actuales: origen vs FactInventorySnapshot",
+     "SELECT SUM(CAST(QuantityOnHand AS DECIMAL(24,2))) FROM Warehouse.StockItemHoldings",
+     "SELECT SUM(CAST(QuantityOnHand AS DECIMAL(24,2))) FROM dw.FactInventorySnapshot",
+     "Snapshot vigente del origen"),
+    ("Hechos analiticos huerfanos = 0",
+     "SELECT 0",
+     """SELECT
+            (SELECT COUNT_BIG(*) FROM dw.FactInvoiceProfit f
+             WHERE NOT EXISTS (SELECT 1 FROM dw.DimDate d WHERE d.DateKey = f.DateKey)
+                OR NOT EXISTS (SELECT 1 FROM dw.DimCustomer c WHERE c.CustomerKey = f.CustomerKey)
+                OR NOT EXISTS (SELECT 1 FROM dw.DimProduct p WHERE p.ProductKey = f.ProductKey))
+          + (SELECT COUNT_BIG(*) FROM dw.FactPurchaseLine f
+             WHERE NOT EXISTS (SELECT 1 FROM dw.DimDate d WHERE d.DateKey = f.DateKey)
+                OR NOT EXISTS (SELECT 1 FROM dw.DimSupplier s WHERE s.SupplierKey = f.SupplierKey)
+                OR NOT EXISTS (SELECT 1 FROM dw.DimProduct p WHERE p.ProductKey = f.ProductKey))
+          + (SELECT COUNT_BIG(*) FROM dw.FactStockMovement f
+             WHERE NOT EXISTS (SELECT 1 FROM dw.DimDate d WHERE d.DateKey = f.DateKey)
+                OR NOT EXISTS (SELECT 1 FROM dw.DimProduct p WHERE p.ProductKey = f.ProductKey))
+          + (SELECT COUNT_BIG(*) FROM dw.FactInventorySnapshot f
+             WHERE NOT EXISTS (SELECT 1 FROM dw.DimDate d WHERE d.DateKey = f.SnapshotDateKey)
+                OR NOT EXISTS (SELECT 1 FROM dw.DimProduct p WHERE p.ProductKey = f.ProductKey))""",
+     None),
 ]
 
 

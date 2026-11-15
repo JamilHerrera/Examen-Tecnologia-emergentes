@@ -54,7 +54,7 @@ pip install -r requirements.txt
 python etl/main.py
 ```
 
-El pipeline carga staging raw/clean y audita la transformacion; no sustituye la carga dimensional `dw_schema.py`, `dw_dimensions.py`, `dw_customer_scd2.py`, `dw_facts.py` y `dw_enrich.py`. Carga el historial de clientes despues de las dimensiones y antes de los hechos.
+El pipeline carga staging raw/clean y audita la transformacion; no sustituye la carga dimensional `dw_schema.py`, `dw_dimensions.py`, `dw_customer_scd2.py`, `dw_facts.py` y `dw_enrich.py`. Carga el historial de clientes despues de las dimensiones y antes de los hechos. Despues de aplicar `database/apply_dw_layer.py`, `dw_analytics.py` carga compras, rentabilidad por factura y movimientos/snapshot de inventario directamente desde WideWorldImporters.
 
 **Tiempo:** depende del hardware y de la base. La carga actual inserta filas individualmente y puede tardar bastante; revisar el log generado en `logs/etl_*.log`.
 
@@ -95,6 +95,8 @@ Logs & Reports
 ```
 - [staging_raw]   → Copia exacta sin transformaciones
 - [staging_clean] → Datos procesados y validados
+- [dw]            → Dimensiones, ventas por pedido y hechos de analitica de negocio
+- [bi]            → Vistas de solo lectura para el dashboard
 ```
 
 ---

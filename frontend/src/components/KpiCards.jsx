@@ -1,7 +1,7 @@
 import { fmt } from '../api.js';
 
 const CARDS = [
-  ['netSales', 'Ventas netas', fmt.money, 'USD antes de impuestos'],
+  ['netSales', 'Ventas netas', fmt.money, 'GBP antes de impuestos'],
   ['orders', 'Pedidos', fmt.int, 'pedidos distintos'],
   ['avgTicket', 'Ticket promedio', fmt.money2, 'ventas / pedidos'],
   ['units', 'Unidades vendidas', fmt.int, 'unidades'],

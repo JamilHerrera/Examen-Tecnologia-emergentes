@@ -126,7 +126,7 @@ export async function getDimensionValues() {
 
 export const KPI_DEFINITIONS = [
   {
-    id: 'netSales', name: 'Ventas netas', unit: 'USD',
+    id: 'netSales', name: 'Ventas netas', unit: 'GBP',
     purpose: 'Medir el ingreso comercial antes de impuestos en el periodo.',
     formula: 'SUM(Quantity x UnitPrice) por linea de pedido (impuestos excluidos; sin devoluciones porque el origen no las registra en pedidos)',
     granularity: 'Linea de pedido', filters: 'Fecha, categoria, region, categoria de cliente, producto',
@@ -140,7 +140,7 @@ export const KPI_DEFINITIONS = [
     source: 'bi.vw_sales_detail', owner: 'Direccion Comercial',
   },
   {
-    id: 'avgTicket', name: 'Ticket promedio', unit: 'USD / pedido',
+    id: 'avgTicket', name: 'Ticket promedio', unit: 'GBP / pedido',
     purpose: 'Valor medio de cada pedido; detecta cambios en el mix de compra.',
     formula: 'Ventas netas / Pedidos', granularity: 'Pedido',
     filters: 'Fecha, categoria, region, categoria de cliente, producto',

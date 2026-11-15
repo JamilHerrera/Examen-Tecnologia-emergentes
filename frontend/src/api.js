@@ -71,8 +71,8 @@ export function connectAlertSocket(onAlert, onState = () => {}) {
 }
 
 export const fmt = {
-  money: (v) => (v == null ? '—' : new Intl.NumberFormat('en-US', { style: 'currency', currency: 'USD', maximumFractionDigits: 0 }).format(v)),
-  money2: (v) => (v == null ? '—' : new Intl.NumberFormat('en-US', { style: 'currency', currency: 'USD' }).format(v)),
+  money: (v) => (v == null ? '—' : new Intl.NumberFormat('en-GB', { style: 'currency', currency: 'GBP', maximumFractionDigits: 0 }).format(v)),
+  money2: (v) => (v == null ? '—' : new Intl.NumberFormat('en-GB', { style: 'currency', currency: 'GBP' }).format(v)),
   int: (v) => (v == null ? '—' : new Intl.NumberFormat('en-US').format(Math.round(v))),
   pct: (v) => (v == null ? '—' : `${v >= 0 ? '+' : ''}${v.toFixed(1)}%`),
   compact: (v) => new Intl.NumberFormat('en-US', { notation: 'compact', maximumFractionDigits: 1 }).format(v),

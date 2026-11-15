@@ -91,7 +91,11 @@ CREATE TABLE ops.alert (
     StatusChangedBy  NVARCHAR(50) NULL,
     DedupKey         NVARCHAR(200) NOT NULL
 );
-CREATE UNIQUE INDEX UX_alert_dedup ON ops.alert(DedupKey);
+IF NOT EXISTS (
+    SELECT 1 FROM sys.indexes
+    WHERE object_id = OBJECT_ID('ops.alert') AND name = 'UX_alert_dedup'
+)
+    CREATE UNIQUE INDEX UX_alert_dedup ON ops.alert(DedupKey);
 GO
 
 IF OBJECT_ID('ops.alert_delivery','U') IS NULL

@@ -80,7 +80,7 @@ Resultado de `python etl/dw_reconcile.py` (guardado en `ops.reconciliation_resul
 | Periodos SCD tipo 2 traslapados | 0 | 0 | si |
 | Hechos con geografia desconocida | 0 | 0 | si |
 
-La reconciliacion incluye tambien cobertura temporal de cada hecho. Una fila de `Sales.Customers_Archive` con periodo de duracion cero se excluye por ser un intervalo vacio; se cargan las 50 versiones historicas con vigencia. Todas las lineas de pedido del origen entran al DW. Las 228,265 lineas de `Sales.InvoiceLines` **no** se cargaron (el grano elegido es pedido, no factura).
+La reconciliacion incluye tambien cobertura temporal de cada hecho. Una fila de `Sales.Customers_Archive` con periodo de duracion cero se excluye por ser un intervalo vacio; se cargan las 50 versiones historicas con vigencia. Todas las lineas de pedido del origen entran a `FactSales`. Las 228,265 lineas de `Sales.InvoiceLines` se cargan por separado en `FactInvoiceProfit`, con grano de linea de factura y version de cliente vigente a la fecha de factura.
 
 ## 6. Indices y restricciones
 
@@ -100,3 +100,16 @@ PK en cada tabla; FK de `FactSales` a las cuatro dimensiones; `UNIQUE` en `DimDa
 Limitaciones conocidas: los pedidos solo conservan fecha (no hora), por lo que un cambio de cliente intradia se asigna a la version vigente a medianoche; `InvoiceID`, `InvoiceStatus`, `SourceLastModified` no poblados; categoria de producto = grupo de inventario principal (un producto pertenece a varios grupos).
 
 Diccionario completo: [DICCIONARIO_DATOS.md](DICCIONARIO_DATOS.md).
+
+## 8. Compras, rentabilidad e inventario
+
+La carga aditiva `etl/dw_analytics.py` usa las tablas fuente WideWorldImporters y las dimensiones ya existentes; requiere aplicar antes `database/apply_dw_layer.py`.
+
+| Hecho | Grano | Fuente y regla |
+|---|---|---|
+| `FactPurchaseLine` | Linea de orden recibida | `Purchasing.PurchaseOrderLines`; importe antes de impuestos = precio esperado por caja × cajas recibidas. Se valida contra la factura del proveedor por orden antes de cargar. |
+| `FactInvoiceProfit` | Linea de factura de venta | `Sales.InvoiceLines`; conserva ventas netas (`ExtendedPrice`), impuesto, utilidad (`LineProfit`) y nota de credito. |
+| `FactStockMovement` | Movimiento de inventario | `Warehouse.StockItemTransactions`; se conserva tipo, cantidad y referencias de origen. Se informa flujo por periodo, no saldo reconstruido. |
+| `FactInventorySnapshot` | Producto en la fecha del snapshot | `Warehouse.StockItemHoldings`; `QuantityOnHand` es el snapshot disponible al 31-may-2016, no un saldo historico. |
+
+Los importes monetarios estan en **GBP**, la moneda documentada por WideWorldImporters. Las facturas de proveedor suman GBP 944,343,271.90 antes de impuestos y concilian con las lineas recibidas. El snapshot incluye 227 productos. No se calculan saldos historicos: al reconstruirlos desde los movimientos se obtienen saldos iniciales negativos para 9 productos, por lo que se muestran solo los flujos mensuales y el snapshot observado.

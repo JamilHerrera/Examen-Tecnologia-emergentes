@@ -5,6 +5,7 @@ import Dashboard from './pages/Dashboard.jsx';
 import Operations from './pages/Operations.jsx';
 import Assistant from './pages/Assistant.jsx';
 import Alerts from './pages/Alerts.jsx';
+import BusinessAnalytics from './pages/BusinessAnalytics.jsx';
 import { Status } from './components/Common.jsx';
 
 function Shell({ user, onLogout }) {
@@ -24,7 +25,13 @@ function Shell({ user, onLogout }) {
   }, setSocketState), []);
 
   const badge = (newAlerts.data?.length ?? 0) + liveCount;
-  const tabs = [['dashboard', 'Dashboard'], ['alerts', `Alertas${badge ? ` (${badge})` : ''}`], ['assistant', 'Asistente IA'], ['ops', 'Operacion']];
+  const tabs = [
+    ['dashboard', 'Dashboard'],
+    ['business', 'Negocio'],
+    ['alerts', `Alertas${badge ? ` (${badge})` : ''}`],
+    ['assistant', 'Asistente IA'],
+    ['ops', 'Operacion'],
+  ];
 
   return (
     <div className="app">
@@ -56,6 +63,7 @@ function Shell({ user, onLogout }) {
       <main>
         <Status loading={meta.loading} error={meta.error} onRetry={meta.reload} height={200}>
           {meta.data && tab === 'dashboard' && <Dashboard meta={meta.data} />}
+          {meta.data && tab === 'business' && <BusinessAnalytics meta={meta.data} />}
           {meta.data && tab === 'alerts' && <Alerts user={user} liveAlert={liveAlert} />}
           {meta.data && tab === 'assistant' && <Assistant />}
           {meta.data && tab === 'ops' && <Operations user={user} />}
